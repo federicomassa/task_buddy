@@ -43,7 +43,9 @@ class TaskTile extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (task.dueDate != null)
-            Text(DateFormat.yMMMd().format(task.dueDate!)),
+            Text(DateFormat.yMMMd().add_Hm().format(task.dueDate!)),
+          if (task.timeEstimate != null)
+            Text('~${_formatEstimate(task.timeEstimate!)}'),
           if (task.isRecurrent)
             Icon(Icons.repeat, size: 16, color: Theme.of(context).colorScheme.primary),
           for (final c in linkedCategories)
@@ -59,5 +61,17 @@ class TaskTile extends StatelessWidget {
           ? IconButton(icon: const Icon(Icons.delete_outline), onPressed: onDelete)
           : null,
     );
+  }
+
+  String _formatEstimate(Duration estimate) {
+    final days = estimate.inDays;
+    final hours = estimate.inHours % 24;
+    final minutes = estimate.inMinutes % 60;
+    final parts = <String>[
+      if (days > 0) '${days}d',
+      if (hours > 0) '${hours}h',
+      if (minutes > 0) '${minutes}m',
+    ];
+    return parts.isEmpty ? '0m' : parts.join(' ');
   }
 }

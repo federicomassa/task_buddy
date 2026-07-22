@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/category.dart';
 import '../../providers/app_providers.dart';
+import '../../widgets/sign_out_button.dart';
 import '../../widgets/task_tile.dart';
 import 'task_form.dart';
 
@@ -16,7 +17,7 @@ class TasksScreen extends ConsumerWidget {
     final taskRepo = ref.read(taskRepositoryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tasks')),
+      appBar: AppBar(title: const Text('Tasks'), actions: const [SignOutButton()]),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showTaskFormDialog(context),
         child: const Icon(Icons.add),

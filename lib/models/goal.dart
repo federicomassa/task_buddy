@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+const _unset = Object();
+
 class Goal {
   final String id;
   final String userId;
@@ -10,6 +12,7 @@ class Goal {
   final String? habitId;
   final DateTime? startDate;
   final DateTime? endDate;
+  final DateTime? dueDate;
   final int? targetCount;
   final int currentProgress;
   final bool isCompleted;
@@ -25,6 +28,7 @@ class Goal {
     this.habitId,
     this.startDate,
     this.endDate,
+    this.dueDate,
     this.targetCount,
     required this.currentProgress,
     required this.isCompleted,
@@ -43,6 +47,7 @@ class Goal {
       habitId: data['habitId'] as String?,
       startDate: (data['startDate'] as Timestamp?)?.toDate(),
       endDate: (data['endDate'] as Timestamp?)?.toDate(),
+      dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
       targetCount: (data['targetCount'] as num?)?.toInt(),
       currentProgress: (data['currentProgress'] as num?)?.toInt() ?? 0,
       isCompleted: data['isCompleted'] as bool? ?? false,
@@ -60,6 +65,7 @@ class Goal {
       'habitId': habitId,
       'startDate': startDate != null ? Timestamp.fromDate(startDate!) : null,
       'endDate': endDate != null ? Timestamp.fromDate(endDate!) : null,
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
       'targetCount': targetCount,
       'currentProgress': currentProgress,
       'isCompleted': isCompleted,
@@ -71,6 +77,7 @@ class Goal {
     String? title,
     String? description,
     String? categoryId,
+    Object? dueDate = _unset,
     int? targetCount,
     int? currentProgress,
     bool? isCompleted,
@@ -85,6 +92,7 @@ class Goal {
       habitId: habitId,
       startDate: startDate,
       endDate: endDate,
+      dueDate: identical(dueDate, _unset) ? this.dueDate : dueDate as DateTime?,
       targetCount: targetCount ?? this.targetCount,
       currentProgress: currentProgress ?? this.currentProgress,
       isCompleted: isCompleted ?? this.isCompleted,

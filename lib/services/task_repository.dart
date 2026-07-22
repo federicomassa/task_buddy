@@ -29,6 +29,7 @@ class TaskRepository {
     RecurrenceRule? recurrenceRule,
     List<String> categoryIds = const [],
     String? linkedGoalId,
+    Duration? timeEstimate,
   }) {
     return _collection.add({
       'userId': userId,
@@ -41,6 +42,7 @@ class TaskRepository {
       'isCompleted': false,
       'completedAt': null,
       'createdAt': Timestamp.now(),
+      'timeEstimateMinutes': timeEstimate?.inMinutes,
     });
   }
 
@@ -52,6 +54,7 @@ class TaskRepository {
       'recurrenceRule': task.recurrenceRule?.name,
       'categoryIds': task.categoryIds,
       'linkedGoalId': task.linkedGoalId,
+      'timeEstimateMinutes': task.timeEstimate?.inMinutes,
     });
   }
 

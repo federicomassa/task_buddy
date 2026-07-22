@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/color_utils.dart';
 import '../../models/category.dart';
 import '../../providers/app_providers.dart';
+import '../../widgets/sign_out_button.dart';
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -14,7 +15,7 @@ class CategoriesScreen extends ConsumerWidget {
     final repo = ref.read(categoryRepositoryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Categories')),
+      appBar: AppBar(title: const Text('Categories'), actions: const [SignOutButton()]),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCategoryDialog(context, ref),
         child: const Icon(Icons.add),

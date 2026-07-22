@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum HabitPeriod { weekly, monthly }
+enum HabitPeriod { daily, weekly, monthly }
 
 HabitPeriod habitPeriodFromString(String value) {
   return HabitPeriod.values.firstWhere(
@@ -17,6 +17,10 @@ class Habit {
   final String? categoryId;
   final int targetCount;
   final HabitPeriod period;
+
+  /// Time of day (minutes since midnight, 0-1439) each cycle instance is due
+  /// by. Optional — when unset, an instance is only due at its period end.
+  final int? dueTimeMinutes;
   final DateTime createdAt;
 
   Habit({
@@ -27,6 +31,7 @@ class Habit {
     this.categoryId,
     required this.targetCount,
     required this.period,
+    this.dueTimeMinutes,
     required this.createdAt,
   });
 
@@ -40,6 +45,7 @@ class Habit {
       categoryId: data['categoryId'] as String?,
       targetCount: (data['targetCount'] as num?)?.toInt() ?? 1,
       period: habitPeriodFromString(data['period'] as String? ?? 'weekly'),
+      dueTimeMinutes: (data['dueTimeMinutes'] as num?)?.toInt(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -52,6 +58,7 @@ class Habit {
       'categoryId': categoryId,
       'targetCount': targetCount,
       'period': period.name,
+      'dueTimeMinutes': dueTimeMinutes,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

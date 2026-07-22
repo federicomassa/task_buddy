@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme.dart';
+import 'features/auth/login_screen.dart';
+import 'features/auth/verify_email_screen.dart';
 import 'firebase_options.dart';
 import 'providers/app_providers.dart';
 import 'widgets/app_shell.dart';
@@ -27,27 +29,43 @@ class TaskBuddyApp extends StatelessWidget {
   }
 }
 
-/// Ensures the user is signed in (anonymously) and that habit cycles are
-/// reconciled for the current period before showing the app shell.
-class AuthGate extends ConsumerStatefulWidget {
+/// Shows the login screen until a user is authenticated, then reconciles
+/// habit cycles for the current period before showing the app shell.
+class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
 
   @override
-  ConsumerState<AuthGate> createState() => _AuthGateState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, _) => Scaffold(body: Center(child: Text('Failed to start: $error'))),
+      data: (user) {
+        if (user == null) return const LoginScreen();
+        if (!user.emailVerified) return VerifyEmailScreen(email: user.email ?? '');
+        return _Bootstrap(key: ValueKey(user.uid), uid: user.uid);
+      },
+    );
+  }
 }
 
-class _AuthGateState extends ConsumerState<AuthGate> {
-  late final Future<void> _bootstrap = _bootstrapApp();
+class _Bootstrap extends ConsumerStatefulWidget {
+  final String uid;
 
-  Future<void> _bootstrapApp() async {
-    final user = await ref.read(authServiceProvider).ensureSignedIn();
-    await ref.read(habitCycleServiceProvider).reconcile(user.uid);
-  }
+  const _Bootstrap({super.key, required this.uid});
+
+  @override
+  ConsumerState<_Bootstrap> createState() => _BootstrapState();
+}
+
+class _BootstrapState extends ConsumerState<_Bootstrap> {
+  late final Future<void> _reconcile = ref.read(habitCycleServiceProvider).reconcile(widget.uid);
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
-      future: _bootstrap,
+      future: _reconcile,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));

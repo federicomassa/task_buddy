@@ -27,6 +27,9 @@ class TaskFormDialog extends ConsumerStatefulWidget {
 class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   late final TextEditingController _titleController =
       TextEditingController(text: widget.task?.title ?? '');
+  late final TextEditingController _estDaysController = TextEditingController();
+  late final TextEditingController _estHoursController = TextEditingController();
+  late final TextEditingController _estMinutesController = TextEditingController();
   DateTime? _dueDate;
   bool _isRecurrent = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.daily;
@@ -43,23 +46,62 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
       _recurrenceRule = task.recurrenceRule ?? RecurrenceRule.daily;
       _categoryIds = [...task.categoryIds];
       _linkedGoalId = task.linkedGoalId;
+      final estimate = task.timeEstimate;
+      if (estimate != null) {
+        final totalMinutes = estimate.inMinutes;
+        _estDaysController.text = (totalMinutes ~/ (24 * 60)).toString();
+        _estHoursController.text = ((totalMinutes % (24 * 60)) ~/ 60).toString();
+        _estMinutesController.text = (totalMinutes % 60).toString();
+      }
     }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
+    _estDaysController.dispose();
+    _estHoursController.dispose();
+    _estMinutesController.dispose();
     super.dispose();
   }
 
   Future<void> _pickDueDate() async {
-    final picked = await showDatePicker(
+    final pickedDate = await showDatePicker(
       context: context,
       initialDate: _dueDate ?? DateTime.now(),
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
     );
-    if (picked != null) setState(() => _dueDate = picked);
+    if (pickedDate == null) return;
+
+    if (!mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _dueDate != null
+          ? TimeOfDay.fromDateTime(_dueDate!)
+          : TimeOfDay.now(),
+    );
+
+    // Default to the last minute of the day (23:59) when no explicit time is
+    // chosen, so an unqualified due date means "end of day", not midnight
+    // at the start of it.
+    setState(() {
+      _dueDate = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime?.hour ?? 23,
+        pickedTime?.minute ?? 59,
+      );
+    });
+  }
+
+  Duration? get _timeEstimate {
+    final days = int.tryParse(_estDaysController.text.trim()) ?? 0;
+    final hours = int.tryParse(_estHoursController.text.trim()) ?? 0;
+    final minutes = int.tryParse(_estMinutesController.text.trim()) ?? 0;
+    if (days == 0 && hours == 0 && minutes == 0) return null;
+    return Duration(days: days, hours: hours, minutes: minutes);
   }
 
   Future<void> _save() async {
@@ -79,6 +121,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
         recurrenceRule: _isRecurrent ? _recurrenceRule : null,
         categoryIds: _categoryIds,
         linkedGoalId: _linkedGoalId,
+        timeEstimate: _timeEstimate,
       );
     } else {
       await repo.updateTask(existing.copyWith(
@@ -88,6 +131,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
         recurrenceRule: _isRecurrent ? _recurrenceRule : null,
         categoryIds: _categoryIds,
         linkedGoalId: _linkedGoalId,
+        timeEstimate: _timeEstimate,
       ));
     }
 
@@ -117,14 +161,47 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                 Expanded(
                   child: Text(_dueDate == null
                       ? 'No due date'
-                      : 'Due ${DateFormat.yMMMd().format(_dueDate!)}'),
+                      : 'Due ${DateFormat.yMMMd().add_Hm().format(_dueDate!)}'),
                 ),
-                TextButton(onPressed: _pickDueDate, child: const Text('Pick date')),
+                TextButton(onPressed: _pickDueDate, child: const Text('Pick date & time')),
                 if (_dueDate != null)
                   IconButton(
                     icon: const Icon(Icons.clear),
                     onPressed: () => setState(() => _dueDate = null),
                   ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Time estimate', style: Theme.of(context).textTheme.labelLarge),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _estDaysController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Days'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _estHoursController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Hours'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _estMinutesController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Minutes'),
+                  ),
+                ),
               ],
             ),
             SwitchListTile(

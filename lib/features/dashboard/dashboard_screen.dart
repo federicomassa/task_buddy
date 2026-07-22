@@ -6,6 +6,7 @@ import '../../models/goal.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/goal_card.dart';
 import '../../widgets/habit_progress_card.dart';
+import '../../widgets/sign_out_button.dart';
 import '../../widgets/task_tile.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -37,7 +38,7 @@ class DashboardScreen extends ConsumerWidget {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Today')),
+      appBar: AppBar(title: const Text('Today'), actions: const [SignOutButton()]),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

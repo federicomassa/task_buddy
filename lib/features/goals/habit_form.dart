@@ -29,12 +29,25 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
       TextEditingController(text: (widget.habit?.targetCount ?? 3).toString());
   String? _categoryId;
   HabitPeriod _period = HabitPeriod.weekly;
+  TimeOfDay? _dueTime;
 
   @override
   void initState() {
     super.initState();
     _categoryId = widget.habit?.categoryId;
     _period = widget.habit?.period ?? HabitPeriod.weekly;
+    final dueTimeMinutes = widget.habit?.dueTimeMinutes;
+    if (dueTimeMinutes != null) {
+      _dueTime = TimeOfDay(hour: dueTimeMinutes ~/ 60, minute: dueTimeMinutes % 60);
+    }
+  }
+
+  Future<void> _pickDueTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _dueTime ?? const TimeOfDay(hour: 7, minute: 0),
+    );
+    if (picked != null) setState(() => _dueTime = picked);
   }
 
   @override
@@ -53,6 +66,7 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
     final habitRepo = ref.read(habitRepositoryProvider);
     final existing = widget.habit;
     final userId = ref.read(currentUserIdProvider);
+    final dueTimeMinutes = _dueTime != null ? _dueTime!.hour * 60 + _dueTime!.minute : null;
 
     if (existing == null) {
       final habitId = await habitRepo.addHabit(
@@ -62,9 +76,11 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
         categoryId: _categoryId,
         targetCount: target,
         period: _period,
+        dueTimeMinutes: dueTimeMinutes,
       );
       // Immediately create the first active cycle instance for this habit.
-      final range = currentPeriodRange(_period, DateTime.now());
+      final now = DateTime.now();
+      final range = currentPeriodRange(_period, now);
       await ref.read(goalRepositoryProvider).addHabitInstance(
             userId: userId,
             habitId: habitId,
@@ -74,6 +90,9 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
             targetCount: target,
             startDate: range.start,
             endDate: range.end,
+            dueDate: dueTimeMinutes != null
+                ? nextOccurrenceOfTimeOfDay(dueTimeMinutes, now)
+                : null,
           );
     } else {
       await habitRepo.updateHabit(Habit(
@@ -84,6 +103,7 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
         categoryId: _categoryId,
         targetCount: target,
         period: _period,
+        dueTimeMinutes: dueTimeMinutes,
         createdAt: existing.createdAt,
       ));
     }
@@ -123,10 +143,27 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
               initialValue: _period,
               decoration: const InputDecoration(labelText: 'Period'),
               items: const [
+                DropdownMenuItem(value: HabitPeriod.daily, child: Text('Daily')),
                 DropdownMenuItem(value: HabitPeriod.weekly, child: Text('Weekly')),
                 DropdownMenuItem(value: HabitPeriod.monthly, child: Text('Monthly')),
               ],
               onChanged: (v) => setState(() => _period = v ?? HabitPeriod.weekly),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(_dueTime == null
+                      ? 'No due time'
+                      : 'Due by ${_dueTime!.format(context)} each cycle'),
+                ),
+                TextButton(onPressed: _pickDueTime, child: const Text('Pick time')),
+                if (_dueTime != null)
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() => _dueTime = null),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             CategoryDropdown(

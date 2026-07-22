@@ -10,6 +10,8 @@ RecurrenceRule? recurrenceRuleFromString(String? value) {
   );
 }
 
+const _unset = Object();
+
 class Task {
   final String id;
   final String userId;
@@ -22,6 +24,7 @@ class Task {
   final bool isCompleted;
   final DateTime? completedAt;
   final DateTime createdAt;
+  final Duration? timeEstimate;
 
   Task({
     required this.id,
@@ -35,10 +38,12 @@ class Task {
     required this.isCompleted,
     this.completedAt,
     required this.createdAt,
+    this.timeEstimate,
   });
 
   factory Task.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
+    final estimateMinutes = data['timeEstimateMinutes'] as int?;
     return Task(
       id: doc.id,
       userId: data['userId'] as String,
@@ -51,6 +56,7 @@ class Task {
       isCompleted: data['isCompleted'] as bool? ?? false,
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      timeEstimate: estimateMinutes != null ? Duration(minutes: estimateMinutes) : null,
     );
   }
 
@@ -66,24 +72,26 @@ class Task {
       'isCompleted': isCompleted,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
+      'timeEstimateMinutes': timeEstimate?.inMinutes,
     };
   }
 
   Task copyWith({
     String? title,
-    DateTime? dueDate,
+    Object? dueDate = _unset,
     bool? isRecurrent,
     RecurrenceRule? recurrenceRule,
     List<String>? categoryIds,
     String? linkedGoalId,
     bool? isCompleted,
     DateTime? completedAt,
+    Object? timeEstimate = _unset,
   }) {
     return Task(
       id: id,
       userId: userId,
       title: title ?? this.title,
-      dueDate: dueDate ?? this.dueDate,
+      dueDate: identical(dueDate, _unset) ? this.dueDate : dueDate as DateTime?,
       isRecurrent: isRecurrent ?? this.isRecurrent,
       recurrenceRule: recurrenceRule ?? this.recurrenceRule,
       categoryIds: categoryIds ?? this.categoryIds,
@@ -91,6 +99,7 @@ class Task {
       isCompleted: isCompleted ?? this.isCompleted,
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt,
+      timeEstimate: identical(timeEstimate, _unset) ? this.timeEstimate : timeEstimate as Duration?,
     );
   }
 }

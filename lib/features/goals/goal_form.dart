@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../models/category.dart';
 import '../../models/goal.dart';
@@ -27,11 +28,13 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
   late final TextEditingController _targetController =
       TextEditingController(text: widget.goal?.targetCount?.toString() ?? '');
   String? _categoryId;
+  DateTime? _dueDate;
 
   @override
   void initState() {
     super.initState();
     _categoryId = widget.goal?.categoryId;
+    _dueDate = widget.goal?.dueDate;
   }
 
   @override
@@ -40,6 +43,37 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
     _descriptionController.dispose();
     _targetController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDueDate() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _dueDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+    );
+    if (pickedDate == null) return;
+
+    if (!mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _dueDate != null
+          ? TimeOfDay.fromDateTime(_dueDate!)
+          : TimeOfDay.now(),
+    );
+
+    // Default to the last minute of the day (23:59) when no explicit time is
+    // chosen, so an unqualified due date means "end of day", not midnight
+    // at the start of it.
+    setState(() {
+      _dueDate = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime?.hour ?? 23,
+        pickedTime?.minute ?? 59,
+      );
+    });
   }
 
   Future<void> _save() async {
@@ -56,6 +90,7 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
         title: title,
         description: _descriptionController.text.trim(),
         categoryId: _categoryId,
+        dueDate: _dueDate,
         targetCount: target,
       );
     } else {
@@ -63,6 +98,7 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
         title: title,
         description: _descriptionController.text.trim(),
         categoryId: _categoryId,
+        dueDate: _dueDate,
         targetCount: target,
       ));
     }
@@ -96,6 +132,22 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
               controller: _targetController,
               decoration: const InputDecoration(labelText: 'Target count (optional)'),
               keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(_dueDate == null
+                      ? 'No due date'
+                      : 'Due ${DateFormat.yMMMd().add_Hm().format(_dueDate!)}'),
+                ),
+                TextButton(onPressed: _pickDueDate, child: const Text('Pick date & time')),
+                if (_dueDate != null)
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() => _dueDate = null),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             CategoryDropdown(

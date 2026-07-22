@@ -35,7 +35,11 @@ class HabitProgressCard extends StatelessWidget {
                   child: Text(habit.title, style: Theme.of(context).textTheme.titleMedium),
                 ),
                 Chip(
-                  label: Text(habit.period == HabitPeriod.weekly ? 'Weekly' : 'Monthly'),
+                  label: Text(switch (habit.period) {
+                    HabitPeriod.daily => 'Daily',
+                    HabitPeriod.weekly => 'Weekly',
+                    HabitPeriod.monthly => 'Monthly',
+                  }),
                   visualDensity: VisualDensity.compact,
                 ),
                 if (onDelete != null)
@@ -49,7 +53,7 @@ class HabitProgressCard extends StatelessWidget {
             Text(
               instance != null
                   ? '${instance.currentProgress} / ${habit.targetCount} '
-                      '· ends ${DateFormat.MMMd().format(instance.endDate!)}'
+                      '· due ${_formatDeadline(instance)}'
                   : 'No active cycle yet',
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -57,5 +61,11 @@ class HabitProgressCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatDeadline(Goal instance) {
+    final dueDate = instance.dueDate;
+    if (dueDate != null) return DateFormat.MMMd().add_Hm().format(dueDate);
+    return DateFormat.MMMd().format(instance.endDate!);
   }
 }

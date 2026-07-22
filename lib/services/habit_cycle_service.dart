@@ -28,6 +28,7 @@ class HabitCycleService {
     );
 
     if (!hasCurrentInstance) {
+      final dueTimeMinutes = habit.dueTimeMinutes;
       await _goalRepository.addHabitInstance(
         userId: userId,
         habitId: habit.id,
@@ -37,6 +38,9 @@ class HabitCycleService {
         targetCount: habit.targetCount,
         startDate: range.start,
         endDate: range.end,
+        dueDate: dueTimeMinutes != null
+            ? nextOccurrenceOfTimeOfDay(dueTimeMinutes, now)
+            : null,
       );
     }
   }

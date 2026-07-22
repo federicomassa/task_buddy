@@ -51,6 +51,7 @@ class GoalRepository {
     required String title,
     required String description,
     String? categoryId,
+    DateTime? dueDate,
     int? targetCount,
   }) {
     return _collection.add({
@@ -62,6 +63,7 @@ class GoalRepository {
       'habitId': null,
       'startDate': null,
       'endDate': null,
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
       'targetCount': targetCount,
       'currentProgress': 0,
       'isCompleted': false,
@@ -78,6 +80,7 @@ class GoalRepository {
     required int targetCount,
     required DateTime startDate,
     required DateTime endDate,
+    DateTime? dueDate,
   }) {
     return _collection.add({
       'userId': userId,
@@ -88,6 +91,7 @@ class GoalRepository {
       'habitId': habitId,
       'startDate': Timestamp.fromDate(startDate),
       'endDate': Timestamp.fromDate(endDate),
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
       'targetCount': targetCount,
       'currentProgress': 0,
       'isCompleted': false,
@@ -100,6 +104,7 @@ class GoalRepository {
       'title': goal.title,
       'description': goal.description,
       'categoryId': goal.categoryId,
+      'dueDate': goal.dueDate != null ? Timestamp.fromDate(goal.dueDate!) : null,
       'targetCount': goal.targetCount,
     });
   }

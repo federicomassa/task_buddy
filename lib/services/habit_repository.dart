@@ -25,6 +25,7 @@ class HabitRepository {
     String? categoryId,
     required int targetCount,
     required HabitPeriod period,
+    int? dueTimeMinutes,
   }) async {
     final doc = await _collection.add({
       'userId': userId,
@@ -33,6 +34,7 @@ class HabitRepository {
       'categoryId': categoryId,
       'targetCount': targetCount,
       'period': period.name,
+      'dueTimeMinutes': dueTimeMinutes,
       'createdAt': Timestamp.now(),
     });
     return doc.id;
@@ -45,6 +47,7 @@ class HabitRepository {
       'categoryId': habit.categoryId,
       'targetCount': habit.targetCount,
       'period': habit.period.name,
+      'dueTimeMinutes': habit.dueTimeMinutes,
     });
   }
 

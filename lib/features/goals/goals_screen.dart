@@ -183,7 +183,9 @@ class _HabitsTabState extends ConsumerState<_HabitsTab> {
     final habitsAsync = ref.watch(habitsStreamProvider);
     final instancesAsync = ref.watch(habitInstancesStreamProvider);
     final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
+    final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
     final habitRepo = ref.read(habitRepositoryProvider);
+    final taskRepo = ref.read(taskRepositoryProvider);
 
     return Scaffold(
       floatingActionButton: FloatingActionButton(
@@ -221,9 +223,21 @@ class _HabitsTabState extends ConsumerState<_HabitsTab> {
                       habit.id,
                       ref.watch(clockProvider).now(),
                     );
+                    final linkedTasks = currentInstance == null
+                        ? const <Task>[]
+                        : tasks.where((t) => t.linkedGoalId == currentInstance.id).toList();
+                    final contributingCount =
+                        linkedTasks.where((t) => t.contributesToCount).length;
                     return HabitProgressCard(
                       habit: habit,
                       currentInstance: currentInstance,
+                      categories: categories,
+                      linkedTasks: linkedTasks,
+                      contributingCount: contributingCount,
+                      onToggleTask: (task) => taskRepo.toggleComplete(task),
+                      onToggleContributesToCount: (task) =>
+                          taskRepo.setContributesToCount(task, !task.contributesToCount),
+                      onTapTask: (task) => showTaskFormDialog(context, task: task),
                       onDelete: () => habitRepo.deleteHabit(habit.id),
                     );
                   },

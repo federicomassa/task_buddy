@@ -29,6 +29,7 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
   String? _categoryId;
   HabitPeriod _period = HabitPeriod.weekly;
   TimeOfDay? _dueTime;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -57,7 +58,7 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     final title = _titleController.text.trim();
     final target = int.tryParse(_targetController.text.trim()) ?? 1;
     if (title.isEmpty) return;
@@ -66,40 +67,44 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
     final existing = widget.habit;
     final userId = ref.read(currentUserIdProvider);
     final dueTimeMinutes = _dueTime != null ? _dueTime!.hour * 60 + _dueTime!.minute : null;
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
 
-    if (existing == null) {
-      // New habits need the created habit's id before the first cycle
-      // instance can be added, so this chain has to stay sequential — but it
-      // runs in the background rather than gating the dialog's close.
-      ref
-          .read(habitCycleServiceProvider)
-          .createHabitWithFirstInstance(
-            userId: userId,
-            title: title,
-            description: _descriptionController.text.trim(),
-            categoryId: _categoryId,
-            targetCount: target,
-            period: _period,
-            dueTimeMinutes: dueTimeMinutes,
-          )
-          .catchError((e) => ref.read(errorReporterProvider).report(e));
-    } else {
-      habitRepo
-          .updateHabit(Habit(
-            id: existing.id,
-            userId: existing.userId,
-            title: title,
-            description: _descriptionController.text.trim(),
-            categoryId: _categoryId,
-            targetCount: target,
-            period: _period,
-            dueTimeMinutes: dueTimeMinutes,
-            createdAt: existing.createdAt,
-          ))
-          .catchError((e) => ref.read(errorReporterProvider).report(e));
+    setState(() => _saving = true);
+    try {
+      if (existing == null) {
+        // New habits need the created habit's id before the first cycle
+        // instance can be added, so this chain has to stay sequential; it's
+        // awaited here so a failed second write is surfaced before the
+        // dialog closes, instead of silently leaving an instance-less habit.
+        await ref.read(habitCycleServiceProvider).createHabitWithFirstInstance(
+              userId: userId,
+              title: title,
+              description: _descriptionController.text.trim(),
+              categoryId: _categoryId,
+              targetCount: target,
+              period: _period,
+              dueTimeMinutes: dueTimeMinutes,
+            );
+        messenger.showSnackBar(SnackBar(content: Text('"$title" created — first cycle started')));
+      } else {
+        await habitRepo.updateHabit(Habit(
+          id: existing.id,
+          userId: existing.userId,
+          title: title,
+          description: _descriptionController.text.trim(),
+          categoryId: _categoryId,
+          targetCount: target,
+          period: _period,
+          dueTimeMinutes: dueTimeMinutes,
+          createdAt: existing.createdAt,
+        ));
+      }
+      navigator.pop();
+    } catch (e) {
+      ref.read(errorReporterProvider).report(e);
+      if (mounted) setState(() => _saving = false);
     }
-
-    Navigator.of(context).pop();
   }
 
   @override
@@ -166,8 +171,20 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
       ],
     );
   }

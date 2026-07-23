@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../core/color_utils.dart';
-import '../features/tasks/task_form.dart';
 import '../models/category.dart';
 import '../models/goal.dart';
-import '../providers/app_providers.dart';
+import '../models/task.dart';
 import 'category_pickers.dart';
 import 'task_tile.dart';
 
-class GoalCard extends ConsumerWidget {
+class GoalCard extends StatelessWidget {
   final Goal goal;
   final List<Category> categories;
+  final List<Task> linkedTasks;
+  final int contributingCount;
   final ValueChanged<bool?>? onToggleCompleted;
+  final ValueChanged<Task>? onToggleTask;
+  final ValueChanged<Task>? onToggleContributesToCount;
+  final ValueChanged<Task>? onTapTask;
   final VoidCallback? onDelete;
   final VoidCallback? onTap;
 
@@ -21,22 +23,23 @@ class GoalCard extends ConsumerWidget {
     super.key,
     required this.goal,
     required this.categories,
+    this.linkedTasks = const [],
+    this.contributingCount = 0,
     this.onToggleCompleted,
+    this.onToggleTask,
+    this.onToggleContributesToCount,
+    this.onTapTask,
     this.onDelete,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final category = categoryById(categories, goal.categoryId);
     final target = goal.targetCount;
     final progress = target != null && target > 0
         ? (goal.currentProgress / target).clamp(0.0, 1.0)
         : null;
-    final linkedTasks = (ref.watch(tasksStreamProvider).value ?? const [])
-        .where((t) => t.linkedGoalId == goal.id)
-        .toList();
-    final taskRepo = ref.read(taskRepositoryProvider);
 
     return Card(
       child: Column(
@@ -64,12 +67,7 @@ class GoalCard extends ConsumerWidget {
                 if (category != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Chip(
-                      label: Text(category.name, style: const TextStyle(fontSize: 11)),
-                      avatar: CircleAvatar(backgroundColor: colorFromHex(category.colorHex)),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+                    child: CategoryChip(category: category),
                   ),
               ],
             ),
@@ -83,11 +81,34 @@ class GoalCard extends ConsumerWidget {
               childrenPadding: const EdgeInsets.only(bottom: 8),
               children: [
                 for (final task in linkedTasks)
-                  TaskTile(
-                    task: task,
-                    categories: categories,
-                    onToggle: (_) => taskRepo.toggleComplete(task),
-                    onTap: () => showTaskFormDialog(context, task: task),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TaskTile(
+                          task: task,
+                          categories: categories,
+                          onToggle: (_) => onToggleTask?.call(task),
+                          onTap: () => onTapTask?.call(task),
+                        ),
+                      ),
+                      if (target != null && target > 0)
+                        IconButton(
+                          icon: Icon(
+                            task.contributesToCount ? Icons.check_circle : Icons.radio_button_unchecked,
+                            color: task.contributesToCount
+                                ? Colors.green
+                                : Theme.of(context).disabledColor,
+                          ),
+                          tooltip: task.contributesToCount
+                              ? 'Counts toward goal'
+                              : contributingCount >= target
+                                  ? 'Limit of $target contributing tasks reached'
+                                  : 'Mark as counting toward goal',
+                          onPressed: !task.contributesToCount && contributingCount >= target
+                              ? null
+                              : () => onToggleContributesToCount?.call(task),
+                        ),
+                    ],
                   ),
               ],
             ),

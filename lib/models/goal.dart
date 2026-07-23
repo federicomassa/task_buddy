@@ -35,7 +35,7 @@ class Goal {
     required this.createdAt,
   });
 
-  factory Goal.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory Goal.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, {required DateTime now}) {
     final data = doc.data()!;
     return Goal(
       id: doc.id,
@@ -51,7 +51,7 @@ class Goal {
       targetCount: (data['targetCount'] as num?)?.toInt(),
       currentProgress: (data['currentProgress'] as num?)?.toInt() ?? 0,
       isCompleted: data['isCompleted'] as bool? ?? false,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? now,
     );
   }
 

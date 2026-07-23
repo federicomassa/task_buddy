@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/duration_parts.dart';
 import '../../models/category.dart';
 import '../../models/goal.dart';
 import '../../models/task.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/category_pickers.dart';
+import '../../widgets/date_pickers.dart';
 
 Future<void> showTaskFormDialog(BuildContext context, {Task? task}) {
   return showDialog(
@@ -31,6 +33,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   late final TextEditingController _estHoursController = TextEditingController();
   late final TextEditingController _estMinutesController = TextEditingController();
   DateTime? _dueDate;
+  DateTime? _scheduledDate;
   bool _isRecurrent = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.daily;
   List<String> _categoryIds = [];
@@ -42,16 +45,17 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     final task = widget.task;
     if (task != null) {
       _dueDate = task.dueDate;
+      _scheduledDate = task.scheduledDate;
       _isRecurrent = task.isRecurrent;
       _recurrenceRule = task.recurrenceRule ?? RecurrenceRule.daily;
       _categoryIds = [...task.categoryIds];
       _linkedGoalId = task.linkedGoalId;
       final estimate = task.timeEstimate;
       if (estimate != null) {
-        final totalMinutes = estimate.inMinutes;
-        _estDaysController.text = (totalMinutes ~/ (24 * 60)).toString();
-        _estHoursController.text = ((totalMinutes % (24 * 60)) ~/ 60).toString();
-        _estMinutesController.text = (totalMinutes % 60).toString();
+        final parts = DurationParts.fromDuration(estimate);
+        _estDaysController.text = parts.days.toString();
+        _estHoursController.text = parts.hours.toString();
+        _estMinutesController.text = parts.minutes.toString();
       }
     }
   }
@@ -66,32 +70,44 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   }
 
   Future<void> _pickDueDate() async {
+    final now = ref.read(clockProvider).now();
+    final picked = await pickDueDateWithDefaultTime(
+      context,
+      initialDate: _dueDate,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365 * 3)),
+      nowForTimeDefault: now,
+    );
+    if (picked == null) return;
+    setState(() => _dueDate = picked);
+  }
+
+  Future<void> _pickScheduledDate() async {
+    final now = ref.read(clockProvider).now();
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _dueDate ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+      initialDate: _scheduledDate ?? now,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365 * 3)),
     );
     if (pickedDate == null) return;
 
     if (!mounted) return;
     final pickedTime = await showTimePicker(
       context: context,
-      initialTime: _dueDate != null
-          ? TimeOfDay.fromDateTime(_dueDate!)
-          : TimeOfDay.now(),
+      initialTime: _scheduledDate != null
+          ? TimeOfDay.fromDateTime(_scheduledDate!)
+          : TimeOfDay.fromDateTime(now),
     );
+    if (pickedTime == null) return;
 
-    // Default to the last minute of the day (23:59) when no explicit time is
-    // chosen, so an unqualified due date means "end of day", not midnight
-    // at the start of it.
     setState(() {
-      _dueDate = DateTime(
+      _scheduledDate = DateTime(
         pickedDate.year,
         pickedDate.month,
         pickedDate.day,
-        pickedTime?.hour ?? 23,
-        pickedTime?.minute ?? 59,
+        pickedTime.hour,
+        pickedTime.minute,
       );
     });
   }
@@ -100,11 +116,10 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     final days = int.tryParse(_estDaysController.text.trim()) ?? 0;
     final hours = int.tryParse(_estHoursController.text.trim()) ?? 0;
     final minutes = int.tryParse(_estMinutesController.text.trim()) ?? 0;
-    if (days == 0 && hours == 0 && minutes == 0) return null;
-    return Duration(days: days, hours: hours, minutes: minutes);
+    return DurationParts(days: days, hours: hours, minutes: minutes).toDuration();
   }
 
-  Future<void> _save() async {
+  void _save() {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
@@ -113,29 +128,40 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     final existing = widget.task;
 
     if (existing == null) {
-      await repo.addTask(
-        userId: userId,
-        title: title,
-        dueDate: _dueDate,
-        isRecurrent: _isRecurrent,
-        recurrenceRule: _isRecurrent ? _recurrenceRule : null,
-        categoryIds: _categoryIds,
-        linkedGoalId: _linkedGoalId,
-        timeEstimate: _timeEstimate,
-      );
+      repo
+          .addTask(
+            userId: userId,
+            title: title,
+            dueDate: _dueDate,
+            scheduledDate: _scheduledDate,
+            isRecurrent: _isRecurrent,
+            recurrenceRule: _isRecurrent ? _recurrenceRule : null,
+            categoryIds: _categoryIds,
+            linkedGoalId: _linkedGoalId,
+            timeEstimate: _timeEstimate,
+          )
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
-      await repo.updateTask(existing.copyWith(
-        title: title,
-        dueDate: _dueDate,
-        isRecurrent: _isRecurrent,
-        recurrenceRule: _isRecurrent ? _recurrenceRule : null,
-        categoryIds: _categoryIds,
-        linkedGoalId: _linkedGoalId,
-        timeEstimate: _timeEstimate,
-      ));
+      final goalChanged = _linkedGoalId != existing.linkedGoalId;
+      repo
+          .updateTask(existing.copyWith(
+            title: title,
+            dueDate: _dueDate,
+            scheduledDate: _scheduledDate,
+            isRecurrent: _isRecurrent,
+            recurrenceRule: _isRecurrent ? _recurrenceRule : null,
+            categoryIds: _categoryIds,
+            linkedGoalId: _linkedGoalId,
+            // The contributes-to-count flag is scoped to the previously
+            // linked goal's N-task cap; relinking to a different goal must
+            // not silently carry it over (and skip that goal's cap).
+            contributesToCount: goalChanged ? false : null,
+            timeEstimate: _timeEstimate,
+          ))
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     }
 
-    if (mounted) Navigator.of(context).pop();
+    Navigator.of(context).pop();
   }
 
   @override
@@ -168,6 +194,22 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
                   IconButton(
                     icon: const Icon(Icons.clear),
                     onPressed: () => setState(() => _dueDate = null),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(_scheduledDate == null
+                      ? 'Not scheduled'
+                      : 'Scheduled ${DateFormat.yMMMd().add_Hm().format(_scheduledDate!)}'),
+                ),
+                TextButton(onPressed: _pickScheduledDate, child: const Text('Pick date & time')),
+                if (_scheduledDate != null)
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() => _scheduledDate = null),
                   ),
               ],
             ),

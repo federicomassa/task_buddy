@@ -77,29 +77,33 @@ class _CategoryFormDialogState extends ConsumerState<_CategoryFormDialog> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  void _save() {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
     final repo = ref.read(categoryRepositoryProvider);
     final existing = widget.category;
 
     if (existing == null) {
-      await repo.addCategory(
-        userId: ref.read(currentUserIdProvider),
-        name: name,
-        colorHex: colorToHex(_color),
-      );
+      repo
+          .addCategory(
+            userId: ref.read(currentUserIdProvider),
+            name: name,
+            colorHex: colorToHex(_color),
+          )
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
-      await repo.updateCategory(Category(
-        id: existing.id,
-        userId: existing.userId,
-        name: name,
-        colorHex: colorToHex(_color),
-        createdAt: existing.createdAt,
-      ));
+      repo
+          .updateCategory(Category(
+            id: existing.id,
+            userId: existing.userId,
+            name: name,
+            colorHex: colorToHex(_color),
+            createdAt: existing.createdAt,
+          ))
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     }
 
-    if (mounted) Navigator.of(context).pop();
+    Navigator.of(context).pop();
   }
 
   @override

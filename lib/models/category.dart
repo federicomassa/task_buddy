@@ -15,14 +15,14 @@ class Category {
     required this.createdAt,
   });
 
-  factory Category.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory Category.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, {required DateTime now}) {
     final data = doc.data()!;
     return Category(
       id: doc.id,
       userId: data['userId'] as String,
       name: data['name'] as String,
       colorHex: data['colorHex'] as String,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? now,
     );
   }
 

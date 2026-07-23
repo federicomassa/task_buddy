@@ -6,6 +6,7 @@ import '../../models/category.dart';
 import '../../models/goal.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/category_pickers.dart';
+import '../../widgets/date_pickers.dart';
 
 Future<void> showGoalFormDialog(BuildContext context, {Goal? goal}) {
   return showDialog(context: context, builder: (_) => GoalFormDialog(goal: goal));
@@ -46,37 +47,19 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
   }
 
   Future<void> _pickDueDate() async {
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: _dueDate ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+    final now = ref.read(clockProvider).now();
+    final picked = await pickDueDateWithDefaultTime(
+      context,
+      initialDate: _dueDate,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365 * 3)),
+      nowForTimeDefault: now,
     );
-    if (pickedDate == null) return;
-
-    if (!mounted) return;
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: _dueDate != null
-          ? TimeOfDay.fromDateTime(_dueDate!)
-          : TimeOfDay.now(),
-    );
-
-    // Default to the last minute of the day (23:59) when no explicit time is
-    // chosen, so an unqualified due date means "end of day", not midnight
-    // at the start of it.
-    setState(() {
-      _dueDate = DateTime(
-        pickedDate.year,
-        pickedDate.month,
-        pickedDate.day,
-        pickedTime?.hour ?? 23,
-        pickedTime?.minute ?? 59,
-      );
-    });
+    if (picked == null) return;
+    setState(() => _dueDate = picked);
   }
 
-  Future<void> _save() async {
+  void _save() {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
     final target = int.tryParse(_targetController.text.trim());
@@ -85,25 +68,29 @@ class _GoalFormDialogState extends ConsumerState<GoalFormDialog> {
     final existing = widget.goal;
 
     if (existing == null) {
-      await repo.addStandaloneGoal(
-        userId: ref.read(currentUserIdProvider),
-        title: title,
-        description: _descriptionController.text.trim(),
-        categoryId: _categoryId,
-        dueDate: _dueDate,
-        targetCount: target,
-      );
+      repo
+          .addStandaloneGoal(
+            userId: ref.read(currentUserIdProvider),
+            title: title,
+            description: _descriptionController.text.trim(),
+            categoryId: _categoryId,
+            dueDate: _dueDate,
+            targetCount: target,
+          )
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
-      await repo.updateGoal(existing.copyWith(
-        title: title,
-        description: _descriptionController.text.trim(),
-        categoryId: _categoryId,
-        dueDate: _dueDate,
-        targetCount: target,
-      ));
+      repo
+          .updateGoal(existing.copyWith(
+            title: title,
+            description: _descriptionController.text.trim(),
+            categoryId: _categoryId,
+            dueDate: _dueDate,
+            targetCount: target,
+          ))
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     }
 
-    if (mounted) Navigator.of(context).pop();
+    Navigator.of(context).pop();
   }
 
   @override

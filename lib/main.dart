@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/error_reporter.dart';
 import 'core/theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/verify_email_screen.dart';
@@ -10,9 +13,25 @@ import 'providers/app_providers.dart';
 import 'widgets/app_shell.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const ProviderScope(child: TaskBuddyApp()));
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+    // Widget build/layout/paint errors: report instead of letting the
+    // framework's default handler crash the app.
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      // Layout overflow ("A RenderFlex overflowed...") is a debug-only
+      // rendering assertion, not a real failure — it's stripped out of
+      // release builds entirely. Surfacing it as a snackbar just interrupts
+      // the user with a dev diagnostic; leave it to the usual debug-mode
+      // overlay instead.
+      if (details.exception.toString().contains('overflowed by')) return;
+      reportError(details.exception);
+    };
+
+    runApp(const ProviderScope(child: TaskBuddyApp()));
+  }, (error, stack) => reportError(error));
 }
 
 class TaskBuddyApp extends StatelessWidget {
@@ -22,6 +41,7 @@ class TaskBuddyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Task Buddy',
+      scaffoldMessengerKey: scaffoldMessengerKey,
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
       home: const AuthGate(),
@@ -60,23 +80,19 @@ class _Bootstrap extends ConsumerStatefulWidget {
 }
 
 class _BootstrapState extends ConsumerState<_Bootstrap> {
-  late final Future<void> _reconcile = ref.read(habitCycleServiceProvider).reconcile(widget.uid);
+  @override
+  void initState() {
+    super.initState();
+    // Runs in the background and streams its results into the Goals/Today
+    // screens as they land, rather than gating first paint on it.
+    ref
+        .read(habitCycleServiceProvider)
+        .reconcile(widget.uid)
+        .catchError((e) => ref.read(errorReporterProvider).report(e));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _reconcile,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-        if (snapshot.hasError) {
-          return Scaffold(
-            body: Center(child: Text('Failed to start: ${snapshot.error}')),
-          );
-        }
-        return const AppShell();
-      },
-    );
+    return const AppShell();
   }
 }

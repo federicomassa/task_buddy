@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/app_providers.dart';
+import '../../widgets/auth_scaffold.dart';
 
 class VerifyEmailScreen extends ConsumerStatefulWidget {
   final String email;
@@ -54,17 +55,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+    return AuthScaffold(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
                   Icon(Icons.mark_email_unread_outlined, size: 56, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(height: 12),
                   Text(
@@ -103,11 +98,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                     onPressed: () => ref.read(authServiceProvider).signOut(),
                     child: const Text('Sign out'),
                   ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        ],
       ),
     );
   }

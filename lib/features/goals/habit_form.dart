@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/period_utils.dart';
 import '../../models/category.dart';
 import '../../models/habit.dart';
 import '../../providers/app_providers.dart';
@@ -58,7 +57,7 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  void _save() {
     final title = _titleController.text.trim();
     final target = int.tryParse(_targetController.text.trim()) ?? 1;
     if (title.isEmpty) return;
@@ -69,46 +68,38 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
     final dueTimeMinutes = _dueTime != null ? _dueTime!.hour * 60 + _dueTime!.minute : null;
 
     if (existing == null) {
-      final habitId = await habitRepo.addHabit(
-        userId: userId,
-        title: title,
-        description: _descriptionController.text.trim(),
-        categoryId: _categoryId,
-        targetCount: target,
-        period: _period,
-        dueTimeMinutes: dueTimeMinutes,
-      );
-      // Immediately create the first active cycle instance for this habit.
-      final now = DateTime.now();
-      final range = currentPeriodRange(_period, now);
-      await ref.read(goalRepositoryProvider).addHabitInstance(
+      // New habits need the created habit's id before the first cycle
+      // instance can be added, so this chain has to stay sequential — but it
+      // runs in the background rather than gating the dialog's close.
+      ref
+          .read(habitCycleServiceProvider)
+          .createHabitWithFirstInstance(
             userId: userId,
-            habitId: habitId,
             title: title,
             description: _descriptionController.text.trim(),
             categoryId: _categoryId,
             targetCount: target,
-            startDate: range.start,
-            endDate: range.end,
-            dueDate: dueTimeMinutes != null
-                ? nextOccurrenceOfTimeOfDay(dueTimeMinutes, now)
-                : null,
-          );
+            period: _period,
+            dueTimeMinutes: dueTimeMinutes,
+          )
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
-      await habitRepo.updateHabit(Habit(
-        id: existing.id,
-        userId: existing.userId,
-        title: title,
-        description: _descriptionController.text.trim(),
-        categoryId: _categoryId,
-        targetCount: target,
-        period: _period,
-        dueTimeMinutes: dueTimeMinutes,
-        createdAt: existing.createdAt,
-      ));
+      habitRepo
+          .updateHabit(Habit(
+            id: existing.id,
+            userId: existing.userId,
+            title: title,
+            description: _descriptionController.text.trim(),
+            categoryId: _categoryId,
+            targetCount: target,
+            period: _period,
+            dueTimeMinutes: dueTimeMinutes,
+            createdAt: existing.createdAt,
+          ))
+          .catchError((e) => ref.read(errorReporterProvider).report(e));
     }
 
-    if (mounted) Navigator.of(context).pop();
+    Navigator.of(context).pop();
   }
 
   @override

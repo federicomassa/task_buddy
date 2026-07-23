@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/color_utils.dart';
+import '../../core/insights_calculations.dart';
 import '../../models/category.dart';
 import '../../models/goal.dart';
 import '../../models/habit.dart';
@@ -19,6 +20,7 @@ class InsightsScreen extends ConsumerWidget {
     final instances = ref.watch(habitInstancesStreamProvider).value ?? const <Goal>[];
     final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
     final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
+    final now = ref.watch(clockProvider).now();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Insights'), actions: const [SignOutButton()]),
@@ -32,14 +34,14 @@ class InsightsScreen extends ConsumerWidget {
           else
             SizedBox(
               height: 220,
-              child: _HabitConsistencyChart(habits: habits, instances: instances),
+              child: _HabitConsistencyChart(habits: habits, instances: instances, now: now),
             ),
           const SizedBox(height: 32),
           Text('Category Distribution (last 30 days)', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           SizedBox(
             height: 240,
-            child: _CategoryDistributionChart(tasks: tasks, categories: categories),
+            child: _CategoryDistributionChart(tasks: tasks, categories: categories, now: now),
           ),
         ],
       ),
@@ -50,25 +52,13 @@ class InsightsScreen extends ConsumerWidget {
 class _HabitConsistencyChart extends StatelessWidget {
   final List<Habit> habits;
   final List<Goal> instances;
+  final DateTime now;
 
-  const _HabitConsistencyChart({required this.habits, required this.instances});
+  const _HabitConsistencyChart({required this.habits, required this.instances, required this.now});
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final rates = <String, double>{};
-    for (final habit in habits) {
-      final past = instances
-          .where((g) => g.habitId == habit.id && g.endDate != null && g.endDate!.isBefore(now))
-          .toList();
-      if (past.isEmpty) {
-        rates[habit.title] = 0;
-        continue;
-      }
-      final completed = past.where((g) => g.isCompleted).length;
-      rates[habit.title] = completed / past.length * 100;
-    }
-
+    final rates = computeHabitConsistencyRates(habits, instances, now);
     final entries = rates.entries.toList();
 
     return BarChart(
@@ -106,32 +96,13 @@ class _HabitConsistencyChart extends StatelessWidget {
 class _CategoryDistributionChart extends StatelessWidget {
   final List<Task> tasks;
   final List<Category> categories;
+  final DateTime now;
 
-  const _CategoryDistributionChart({required this.tasks, required this.categories});
+  const _CategoryDistributionChart({required this.tasks, required this.categories, required this.now});
 
   @override
   Widget build(BuildContext context) {
-    final cutoff = DateTime.now().subtract(const Duration(days: 30));
-    final counts = <String, int>{};
-
-    for (final task in tasks) {
-      if (!task.isCompleted || task.completedAt == null) continue;
-      if (task.completedAt!.isBefore(cutoff)) continue;
-      if (task.categoryIds.isEmpty) {
-        counts['Uncategorized'] = (counts['Uncategorized'] ?? 0) + 1;
-        continue;
-      }
-      for (final categoryId in task.categoryIds) {
-        var name = 'Unknown';
-        for (final c in categories) {
-          if (c.id == categoryId) {
-            name = c.name;
-            break;
-          }
-        }
-        counts[name] = (counts[name] ?? 0) + 1;
-      }
-    }
+    final counts = computeCategoryDistribution(tasks, categories, now);
 
     if (counts.isEmpty) {
       return const Center(child: Text('No completed tasks in the last 30 days.'));

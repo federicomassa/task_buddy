@@ -82,6 +82,63 @@ class CategoryMultiSelect extends StatelessWidget {
   }
 }
 
+class CategoryFilterBar extends StatelessWidget {
+  final List<Category> categories;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  const CategoryFilterBar({
+    super.key,
+    required this.categories,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (categories.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        ChoiceChip(
+          label: const Text('All'),
+          selected: selectedId == null,
+          onSelected: (_) => onChanged(null),
+        ),
+        ...categories.map((c) {
+          final selected = selectedId == c.id;
+          return ChoiceChip(
+            label: Text(c.name),
+            avatar: CircleAvatar(backgroundColor: colorFromHex(c.colorHex)),
+            selected: selected,
+            onSelected: (isSelected) => onChanged(isSelected ? c.id : null),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class CategoryChip extends StatelessWidget {
+  final Category category;
+  final double fontSize;
+
+  const CategoryChip({super.key, required this.category, this.fontSize = 11});
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      label: Text(category.name, style: TextStyle(fontSize: fontSize)),
+      avatar: CircleAvatar(backgroundColor: colorFromHex(category.colorHex)),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+}
+
 Category? categoryById(List<Category> categories, String? id) {
   if (id == null) return null;
   for (final c in categories) {

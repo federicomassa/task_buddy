@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../features/categories/categories_screen.dart';
-import '../features/dashboard/dashboard_screen.dart';
 import '../features/goals/goals_screen.dart';
-import '../features/insights/insights_screen.dart';
 import '../features/tasks/tasks_screen.dart';
+import '../features/today/today_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -16,25 +15,25 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  static const double _wideBreakpoint = 720;
+
   static const _destinations = [
     NavigationDestination(icon: Icon(Icons.today_outlined), selectedIcon: Icon(Icons.today), label: 'Today'),
     NavigationDestination(icon: Icon(Icons.check_box_outlined), selectedIcon: Icon(Icons.check_box), label: 'Tasks'),
     NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'Goals'),
     NavigationDestination(icon: Icon(Icons.label_outline), selectedIcon: Icon(Icons.label), label: 'Categories'),
-    NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Insights'),
   ];
 
   static const _pages = [
-    DashboardScreen(),
+    TodayScreen(),
     TasksScreen(),
     GoalsScreen(),
     CategoriesScreen(),
-    InsightsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width >= 720;
+    final isWide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
     if (isWide) {
       return Scaffold(

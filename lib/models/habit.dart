@@ -35,7 +35,7 @@ class Habit {
     required this.createdAt,
   });
 
-  factory Habit.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory Habit.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, {required DateTime now}) {
     final data = doc.data()!;
     return Habit(
       id: doc.id,
@@ -46,7 +46,7 @@ class Habit {
       targetCount: (data['targetCount'] as num?)?.toInt() ?? 1,
       period: habitPeriodFromString(data['period'] as String? ?? 'weekly'),
       dueTimeMinutes: (data['dueTimeMinutes'] as num?)?.toInt(),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? now,
     );
   }
 

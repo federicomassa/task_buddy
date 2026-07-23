@@ -12,7 +12,8 @@ abstract class HabitRepository {
     required String description,
     String? categoryId,
     required int targetCount,
-    required HabitPeriod period,
+    required int recurrenceInterval,
+    required RecurrenceUnit recurrenceUnit,
     int? dueTimeMinutes,
   });
 
@@ -46,7 +47,8 @@ class FirestoreHabitRepository implements HabitRepository {
     required String description,
     String? categoryId,
     required int targetCount,
-    required HabitPeriod period,
+    required int recurrenceInterval,
+    required RecurrenceUnit recurrenceUnit,
     int? dueTimeMinutes,
   }) async {
     final doc = await _collection.add({
@@ -55,7 +57,8 @@ class FirestoreHabitRepository implements HabitRepository {
       'description': description,
       'categoryId': categoryId,
       'targetCount': targetCount,
-      'period': period.name,
+      'recurrenceInterval': recurrenceInterval,
+      'recurrenceUnit': recurrenceUnit.name,
       'dueTimeMinutes': dueTimeMinutes,
       'createdAt': Timestamp.now(),
     });
@@ -69,7 +72,8 @@ class FirestoreHabitRepository implements HabitRepository {
       'description': habit.description,
       'categoryId': habit.categoryId,
       'targetCount': habit.targetCount,
-      'period': habit.period.name,
+      'recurrenceInterval': habit.recurrenceInterval,
+      'recurrenceUnit': habit.recurrenceUnit.name,
       'dueTimeMinutes': habit.dueTimeMinutes,
     });
   }

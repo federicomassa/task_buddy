@@ -16,6 +16,7 @@ class HabitProgressCard extends StatelessWidget {
   final ValueChanged<Task>? onToggleTask;
   final ValueChanged<Task>? onToggleContributesToCount;
   final ValueChanged<Task>? onTapTask;
+  final VoidCallback? onTap;
   final VoidCallback? onDelete;
 
   const HabitProgressCard({
@@ -28,6 +29,7 @@ class HabitProgressCard extends StatelessWidget {
     this.onToggleTask,
     this.onToggleContributesToCount,
     this.onTapTask,
+    this.onTap,
     this.onDelete,
   });
 
@@ -41,40 +43,39 @@ class HabitProgressCard extends StatelessWidget {
     return Card(
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(habit.title, style: Theme.of(context).textTheme.titleMedium),
-                    ),
-                    Chip(
-                      label: Text(switch (habit.period) {
-                        HabitPeriod.daily => 'Daily',
-                        HabitPeriod.weekly => 'Weekly',
-                        HabitPeriod.monthly => 'Monthly',
-                      }),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    if (onDelete != null)
-                      IconButton(icon: const Icon(Icons.delete_outline), onPressed: onDelete),
-                  ],
-                ),
-                if (habit.description.isNotEmpty) Text(habit.description),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: progress),
-                const SizedBox(height: 4),
-                Text(
-                  instance != null
-                      ? '${instance.currentProgress} / ${habit.targetCount} '
-                          '· due ${_formatDeadline(instance)}'
-                      : 'No active cycle yet',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+          InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(habit.title, style: Theme.of(context).textTheme.titleMedium),
+                      ),
+                      Chip(
+                        label: Text(_formatRecurrence(habit)),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      if (onDelete != null)
+                        IconButton(icon: const Icon(Icons.delete_outline), onPressed: onDelete),
+                    ],
+                  ),
+                  if (habit.description.isNotEmpty) Text(habit.description),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(value: progress),
+                  const SizedBox(height: 4),
+                  Text(
+                    instance != null
+                        ? '${instance.currentProgress} / ${habit.targetCount} '
+                            '· due ${_formatDeadline(instance)}'
+                        : 'No active cycle yet',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
           ),
           if (linkedTasks.isNotEmpty)
@@ -123,5 +124,17 @@ class HabitProgressCard extends StatelessWidget {
     final dueDate = instance.dueDate;
     if (dueDate != null) return DateFormat.MMMd().add_Hm().format(dueDate);
     return DateFormat.MMMd().format(instance.endDate!);
+  }
+
+  String _formatRecurrence(Habit habit) {
+    final unitName = switch (habit.recurrenceUnit) {
+      RecurrenceUnit.days => habit.recurrenceInterval == 1 ? 'day' : 'days',
+      RecurrenceUnit.weeks => habit.recurrenceInterval == 1 ? 'week' : 'weeks',
+      RecurrenceUnit.months => habit.recurrenceInterval == 1 ? 'month' : 'months',
+    };
+    final times = habit.targetCount == 1 ? 'Once' : '${habit.targetCount}×';
+    return habit.recurrenceInterval == 1
+        ? '$times / $unitName'
+        : '$times / ${habit.recurrenceInterval} $unitName';
   }
 }

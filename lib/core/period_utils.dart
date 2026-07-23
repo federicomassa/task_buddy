@@ -7,22 +7,18 @@ class PeriodRange {
   const PeriodRange(this.start, this.end);
 }
 
-/// Returns the [start, end) range for the period containing [date].
-/// Daily periods run midnight..midnight; weekly periods run Monday..Sunday;
-/// monthly periods run calendar months.
-PeriodRange currentPeriodRange(HabitPeriod period, DateTime date) {
+/// Returns the [start, end) range for a cycle of [interval] [unit]s
+/// starting at [date] (floored to midnight). E.g. interval=2, unit=weeks
+/// yields a 14-day range starting today.
+PeriodRange currentPeriodRange(int interval, RecurrenceUnit unit, DateTime date) {
   final day = DateTime(date.year, date.month, date.day);
-  switch (period) {
-    case HabitPeriod.daily:
-      return PeriodRange(day, day.add(const Duration(days: 1)));
-    case HabitPeriod.weekly:
-      final start = day.subtract(Duration(days: day.weekday - DateTime.monday));
-      final end = start.add(const Duration(days: 7));
-      return PeriodRange(start, end);
-    case HabitPeriod.monthly:
-      final start = DateTime(day.year, day.month, 1);
-      final end = DateTime(day.year, day.month + 1, 1);
-      return PeriodRange(start, end);
+  switch (unit) {
+    case RecurrenceUnit.days:
+      return PeriodRange(day, day.add(Duration(days: interval)));
+    case RecurrenceUnit.weeks:
+      return PeriodRange(day, day.add(Duration(days: interval * 7)));
+    case RecurrenceUnit.months:
+      return PeriodRange(day, DateTime(day.year, day.month + interval, day.day));
   }
 }
 

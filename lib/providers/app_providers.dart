@@ -14,7 +14,9 @@ import '../services/category_repository.dart';
 import '../services/goal_repository.dart';
 import '../services/habit_cycle_service.dart';
 import '../services/habit_repository.dart';
+import '../services/notification_service.dart';
 import '../services/task_repository.dart';
+import '../services/user_settings_repository.dart';
 
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
   return FirebaseFirestore.instance;
@@ -70,6 +72,14 @@ final habitCycleServiceProvider = Provider<HabitCycleService>((ref) {
   );
 });
 
+final userSettingsRepositoryProvider = Provider<UserSettingsRepository>((ref) {
+  return FirestoreUserSettingsRepository(ref.watch(firestoreProvider));
+});
+
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});
+
 final categoriesStreamProvider = StreamProvider((ref) {
   final userId = ref.watch(currentUserIdProvider);
   return ref.watch(categoryRepositoryProvider).streamCategories(userId);
@@ -98,6 +108,11 @@ final allGoalsStreamProvider = StreamProvider((ref) {
 final tasksStreamProvider = StreamProvider((ref) {
   final userId = ref.watch(currentUserIdProvider);
   return ref.watch(taskRepositoryProvider).streamTasks(userId);
+});
+
+final userSettingsStreamProvider = StreamProvider((ref) {
+  final userId = ref.watch(currentUserIdProvider);
+  return ref.watch(userSettingsRepositoryProvider).streamSettings(userId);
 });
 
 /// Tasks due today or overdue, and not yet scheduled for today — candidates

@@ -25,9 +25,11 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
   late final TextEditingController _descriptionController =
       TextEditingController(text: widget.habit?.description ?? '');
   late final TextEditingController _targetController =
-      TextEditingController(text: (widget.habit?.targetCount ?? 3).toString());
+      TextEditingController(text: (widget.habit?.targetCount ?? 1).toString());
+  late final TextEditingController _intervalController =
+      TextEditingController(text: (widget.habit?.recurrenceInterval ?? 1).toString());
   String? _categoryId;
-  HabitPeriod _period = HabitPeriod.weekly;
+  RecurrenceUnit _recurrenceUnit = RecurrenceUnit.days;
   TimeOfDay? _dueTime;
   bool _saving = false;
 
@@ -35,7 +37,7 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
   void initState() {
     super.initState();
     _categoryId = widget.habit?.categoryId;
-    _period = widget.habit?.period ?? HabitPeriod.weekly;
+    _recurrenceUnit = widget.habit?.recurrenceUnit ?? RecurrenceUnit.days;
     final dueTimeMinutes = widget.habit?.dueTimeMinutes;
     if (dueTimeMinutes != null) {
       _dueTime = TimeOfDay(hour: dueTimeMinutes ~/ 60, minute: dueTimeMinutes % 60);
@@ -55,15 +57,16 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
     _titleController.dispose();
     _descriptionController.dispose();
     _targetController.dispose();
+    _intervalController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final title = _titleController.text.trim();
     final target = int.tryParse(_targetController.text.trim()) ?? 1;
+    final interval = int.tryParse(_intervalController.text.trim()) ?? 1;
     if (title.isEmpty) return;
 
-    final habitRepo = ref.read(habitRepositoryProvider);
     final existing = widget.habit;
     final userId = ref.read(currentUserIdProvider);
     final dueTimeMinutes = _dueTime != null ? _dueTime!.hour * 60 + _dueTime!.minute : null;
@@ -83,22 +86,24 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
               description: _descriptionController.text.trim(),
               categoryId: _categoryId,
               targetCount: target,
-              period: _period,
+              recurrenceInterval: interval,
+              recurrenceUnit: _recurrenceUnit,
               dueTimeMinutes: dueTimeMinutes,
             );
         messenger.showSnackBar(SnackBar(content: Text('"$title" created — first cycle started')));
       } else {
-        await habitRepo.updateHabit(Habit(
-          id: existing.id,
-          userId: existing.userId,
-          title: title,
-          description: _descriptionController.text.trim(),
-          categoryId: _categoryId,
-          targetCount: target,
-          period: _period,
-          dueTimeMinutes: dueTimeMinutes,
-          createdAt: existing.createdAt,
-        ));
+        await ref.read(habitCycleServiceProvider).updateHabitAndCurrentInstance(Habit(
+              id: existing.id,
+              userId: existing.userId,
+              title: title,
+              description: _descriptionController.text.trim(),
+              categoryId: _categoryId,
+              targetCount: target,
+              recurrenceInterval: interval,
+              recurrenceUnit: _recurrenceUnit,
+              dueTimeMinutes: dueTimeMinutes,
+              createdAt: existing.createdAt,
+            ));
       }
       navigator.pop();
     } catch (e) {
@@ -129,21 +134,50 @@ class _HabitFormDialogState extends ConsumerState<HabitFormDialog> {
               maxLines: 2,
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _targetController,
-              decoration: const InputDecoration(labelText: 'Target count per period'),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<HabitPeriod>(
-              initialValue: _period,
-              decoration: const InputDecoration(labelText: 'Period'),
-              items: const [
-                DropdownMenuItem(value: HabitPeriod.daily, child: Text('Daily')),
-                DropdownMenuItem(value: HabitPeriod.weekly, child: Text('Weekly')),
-                DropdownMenuItem(value: HabitPeriod.monthly, child: Text('Monthly')),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _targetController,
+                    decoration: const InputDecoration(labelText: 'Times'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('every'),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _intervalController,
+                    decoration: const InputDecoration(labelText: 'Every'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<RecurrenceUnit>(
+                    initialValue: _recurrenceUnit,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: RecurrenceUnit.days,
+                        child: FittedBox(fit: BoxFit.scaleDown, child: Text('Days')),
+                      ),
+                      DropdownMenuItem(
+                        value: RecurrenceUnit.weeks,
+                        child: FittedBox(fit: BoxFit.scaleDown, child: Text('Weeks')),
+                      ),
+                      DropdownMenuItem(
+                        value: RecurrenceUnit.months,
+                        child: FittedBox(fit: BoxFit.scaleDown, child: Text('Months')),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => _recurrenceUnit = v ?? RecurrenceUnit.days),
+                  ),
+                ),
               ],
-              onChanged: (v) => setState(() => _period = v ?? HabitPeriod.weekly),
             ),
             const SizedBox(height: 12),
             Row(

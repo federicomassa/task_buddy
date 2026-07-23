@@ -5,6 +5,7 @@ import '../../models/category.dart';
 import '../../models/task.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/category_pickers.dart';
+import '../../widgets/settings_button.dart';
 import '../../widgets/sign_out_button.dart';
 import '../../widgets/task_tile.dart';
 import 'task_form.dart';
@@ -85,7 +86,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final taskRepo = ref.read(taskRepositoryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tasks'), actions: const [SignOutButton()]),
+      appBar: AppBar(
+        title: const Text('Tasks'),
+        actions: const [SettingsButton(), SignOutButton()],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showTaskFormDialog(context),
         child: const Icon(Icons.add),

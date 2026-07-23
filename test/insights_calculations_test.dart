@@ -14,7 +14,8 @@ void main() {
         title: 'Habit $id',
         description: '',
         targetCount: 1,
-        period: HabitPeriod.weekly,
+        recurrenceInterval: 1,
+        recurrenceUnit: RecurrenceUnit.weeks,
         createdAt: now,
       );
 

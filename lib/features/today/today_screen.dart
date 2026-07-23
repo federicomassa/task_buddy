@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/date_utils.dart';
 import '../../providers/app_providers.dart';
+import '../../widgets/settings_button.dart';
 import '../../widgets/sign_out_button.dart';
 import 'calendar_pane.dart';
 import 'unscheduled_list_pane.dart';
@@ -18,7 +19,10 @@ class TodayScreen extends ConsumerWidget {
     final isWide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Today'), actions: const [SignOutButton()]),
+      appBar: AppBar(
+        title: const Text('Today'),
+        actions: const [SettingsButton(), SignOutButton()],
+      ),
       body: isWide
           ? Row(
               children: [

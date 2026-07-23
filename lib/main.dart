@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/error_reporter.dart';
+import 'core/platform_support.dart';
 import 'core/theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/verify_email_screen.dart';
@@ -89,6 +90,28 @@ class _BootstrapState extends ConsumerState<_Bootstrap> {
         .read(habitCycleServiceProvider)
         .reconcile(widget.uid)
         .catchError((e) => ref.read(errorReporterProvider).report(e));
+
+    if (isAndroidPlatform) {
+      _restoreDailyReminder();
+    }
+  }
+
+  // Re-establishes the reminder alarm on every app open. This is what makes
+  // the inexact, non-boot-persistent alarm scheduling in NotificationService
+  // self-heal: even if the OS drops it across a reboot, opening the app
+  // before the reminder time re-arms it.
+  Future<void> _restoreDailyReminder() async {
+    try {
+      final notifications = ref.read(notificationServiceProvider);
+      await notifications.initialize();
+      final settings =
+          await ref.read(userSettingsRepositoryProvider).streamSettings(widget.uid).first;
+      if (settings.reminderEnabled) {
+        await notifications.scheduleDailyReminder(settings.reminderMinutes);
+      }
+    } catch (e) {
+      ref.read(errorReporterProvider).report(e);
+    }
   }
 
   @override

@@ -9,6 +9,7 @@ import '../../providers/app_providers.dart';
 import '../../widgets/category_pickers.dart';
 import '../../widgets/goal_card.dart';
 import '../../widgets/habit_progress_card.dart';
+import '../../widgets/settings_button.dart';
 import '../../widgets/sign_out_button.dart';
 import '../tasks/task_form.dart';
 import 'goal_form.dart';
@@ -58,7 +59,7 @@ class GoalsScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Goals & Habits'),
           bottom: const TabBar(tabs: [Tab(text: 'Goals'), Tab(text: 'Habits')]),
-          actions: const [SignOutButton()],
+          actions: const [SettingsButton(), SignOutButton()],
         ),
         body: const TabBarView(
           children: [_GoalsTab(), _HabitsTab()],
@@ -238,6 +239,7 @@ class _HabitsTabState extends ConsumerState<_HabitsTab> {
                       onToggleContributesToCount: (task) =>
                           taskRepo.setContributesToCount(task, !task.contributesToCount),
                       onTapTask: (task) => showTaskFormDialog(context, task: task),
+                      onTap: () => showHabitFormDialog(context, habit: habit),
                       onDelete: () => habitRepo.deleteHabit(habit.id),
                     );
                   },

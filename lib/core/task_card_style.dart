@@ -9,6 +9,7 @@ const Color dullRed = Color(0xFFB98A8A);
 const Color dullGreen = Color(0xFF8FAE8F);
 
 bool isTaskOverdue(Task task, {required DateTime today}) {
+  if (task.isCompleted) return false;
   final due = task.dueDate;
   if (due == null) return false;
   return DateTime(due.year, due.month, due.day).isBefore(today);

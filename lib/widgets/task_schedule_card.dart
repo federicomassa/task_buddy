@@ -24,7 +24,7 @@ class TaskScheduleCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final content = _CardContent(task: task, categories: categories, today: today);
+    final content = TaskEstimateCard(task: task, categories: categories, today: today);
 
     if (task.timeEstimate == null) {
       // Tasks without a time estimate can't be scheduled on the calendar,
@@ -53,12 +53,17 @@ class TaskScheduleCard extends ConsumerWidget {
   }
 }
 
-class _CardContent extends StatelessWidget {
+/// The visual content of a task card: title, overdue/estimate/category
+/// chips, and a left border whose color/height communicate estimate and
+/// overdue status (via [taskCardStyle]). Shared by [TaskScheduleCard] (the
+/// Today screen's unscheduled list) and the "Help me plan" matrix, so both
+/// surfaces render tasks identically.
+class TaskEstimateCard extends StatelessWidget {
   final Task task;
   final List<Category> categories;
   final DateTime today;
 
-  const _CardContent({required this.task, required this.categories, required this.today});
+  const TaskEstimateCard({super.key, required this.task, required this.categories, required this.today});
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +101,11 @@ class _CardContent extends StatelessWidget {
                   const Text('Overdue', style: TextStyle(color: Colors.red, fontSize: 11)),
                 if (task.timeEstimate != null)
                   Text('~${formatEstimate(task.timeEstimate!)}', style: const TextStyle(fontSize: 11)),
+                if (task.scheduledDate != null)
+                  Text(
+                    'At ${TimeOfDay.fromDateTime(task.scheduledDate!).format(context)}',
+                    style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                  ),
                 for (final c in linkedCategories) CategoryChip(category: c, fontSize: 10),
               ],
             ),

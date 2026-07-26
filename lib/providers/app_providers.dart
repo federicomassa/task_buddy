@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/clock.dart';
 import '../core/date_utils.dart';
 import '../core/error_reporter.dart';
+import '../core/filter_state.dart';
 import '../models/task.dart';
 import '../services/auth_service.dart';
 import '../services/category_repository.dart';
@@ -115,13 +116,21 @@ final userSettingsStreamProvider = StreamProvider((ref) {
   return ref.watch(userSettingsRepositoryProvider).streamSettings(userId);
 });
 
+/// Today's date, stripped of time-of-day. Centralized so every screen that
+/// needs "today" (for overdue checks, due-date filtering, etc.) shares the
+/// exact same value instead of each recomputing `dateOnly(clockProvider.now())`
+/// — a previous divergence (one call site used the raw timestamp) caused
+/// tasks due later today to be misclassified as overdue.
+final todayProvider = Provider<DateTime>((ref) => dateOnly(ref.watch(clockProvider).now()));
+
 /// Tasks due today or overdue, and not yet scheduled for today — candidates
-/// for the Today screen's unscheduled task list. Completed tasks stay in
-/// the list (styled green by [taskCardStyle]) instead of disappearing.
+/// for the Today screen's unscheduled task list. Completed tasks are
+/// excluded since this list is for planning the day.
 final unscheduledTodayTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
-  final today = dateOnly(ref.watch(clockProvider).now());
+  final today = ref.watch(todayProvider);
   return tasks.where((t) {
+    if (t.isCompleted) return false;
     if (t.dueDate == null) return false;
     final due = dateOnly(t.dueDate!);
     if (due.isAfter(today)) return false;
@@ -131,12 +140,30 @@ final unscheduledTodayTasksProvider = Provider<List<Task>>((ref) {
   }).toList();
 });
 
+/// Active tasks due today or earlier, regardless of whether they're already
+/// scheduled — the "Help me plan" matrix's pool. Unlike
+/// [unscheduledTodayTasksProvider] (which feeds the Today screen's
+/// unscheduled list and deliberately excludes anything already on the
+/// calendar), the matrix is for triaging the *whole* day, including tasks
+/// you've already dragged onto the calendar, so re-running "Schedule my day"
+/// can re-plan them too.
+final planEligibleTasksProvider = Provider<List<Task>>((ref) {
+  final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
+  final today = ref.watch(todayProvider);
+  return tasks.where((t) {
+    if (t.isCompleted) return false;
+    if (t.dueDate == null) return false;
+    final due = dateOnly(t.dueDate!);
+    return !due.isAfter(today);
+  }).toList();
+});
+
 /// Tasks already scheduled for today — rendered as blocks on the Today
 /// screen's calendar. Completed tasks stay visible (styled green) instead
 /// of disappearing.
 final todayScheduledTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
-  final today = dateOnly(ref.watch(clockProvider).now());
+  final today = ref.watch(todayProvider);
   return tasks.where((t) {
     if (t.scheduledDate == null) return false;
     return dateOnly(t.scheduledDate!) == today;
@@ -166,6 +193,45 @@ class DragPreviewNotifier extends Notifier<DragPreview?> {
 
 final dragPreviewProvider = NotifierProvider<DragPreviewNotifier, DragPreview?>(
   DragPreviewNotifier.new,
+);
+
+/// Filter selections for the Tasks tab. In-memory only (resets on cold
+/// start) but promoted out of widget state so the filter button (in the
+/// AppBar) and the filter bottom sheet (a separate widget subtree) can share
+/// it without prop drilling.
+class TaskFilterNotifier extends Notifier<TaskFilterState> {
+  @override
+  TaskFilterState build() => TaskFilterState.defaults();
+
+  void update(TaskFilterState Function(TaskFilterState) fn) => state = fn(state);
+}
+
+final taskFilterProvider = NotifierProvider<TaskFilterNotifier, TaskFilterState>(
+  TaskFilterNotifier.new,
+);
+
+/// Filter selections for the Goals tab. See [TaskFilterNotifier].
+class GoalFilterNotifier extends Notifier<GoalFilterState> {
+  @override
+  GoalFilterState build() => GoalFilterState.defaults();
+
+  void update(GoalFilterState Function(GoalFilterState) fn) => state = fn(state);
+}
+
+final goalFilterProvider = NotifierProvider<GoalFilterNotifier, GoalFilterState>(
+  GoalFilterNotifier.new,
+);
+
+/// Filter selections for the Habits tab. See [TaskFilterNotifier].
+class HabitFilterNotifier extends Notifier<HabitFilterState> {
+  @override
+  HabitFilterState build() => HabitFilterState.defaults();
+
+  void update(HabitFilterState Function(HabitFilterState) fn) => state = fn(state);
+}
+
+final habitFilterProvider = NotifierProvider<HabitFilterNotifier, HabitFilterState>(
+  HabitFilterNotifier.new,
 );
 
 /// Shared onDragUpdate/onDragEnd wiring for task cards that report their

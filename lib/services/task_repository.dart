@@ -17,6 +17,9 @@ abstract class TaskRepository {
     List<String> categoryIds = const [],
     String? linkedGoalId,
     Duration? timeEstimate,
+    bool isImportant = false,
+    bool isUrgent = false,
+    bool constrainedToWorkingHours = true,
   });
 
   Future<void> updateTask(Task task);
@@ -67,6 +70,9 @@ class FirestoreTaskRepository implements TaskRepository {
     List<String> categoryIds = const [],
     String? linkedGoalId,
     Duration? timeEstimate,
+    bool isImportant = false,
+    bool isUrgent = false,
+    bool constrainedToWorkingHours = true,
   }) {
     return _collection.add({
       'userId': userId,
@@ -82,6 +88,9 @@ class FirestoreTaskRepository implements TaskRepository {
       'completedAt': null,
       'createdAt': Timestamp.now(),
       'timeEstimateMinutes': timeEstimate?.inMinutes,
+      'isImportant': isImportant,
+      'isUrgent': isUrgent,
+      'constrainedToWorkingHours': constrainedToWorkingHours,
     });
   }
 
@@ -97,6 +106,9 @@ class FirestoreTaskRepository implements TaskRepository {
       'linkedGoalId': task.linkedGoalId,
       'contributesToCount': task.contributesToCount,
       'timeEstimateMinutes': task.timeEstimate?.inMinutes,
+      'isImportant': task.isImportant,
+      'isUrgent': task.isUrgent,
+      'constrainedToWorkingHours': task.constrainedToWorkingHours,
     });
   }
 

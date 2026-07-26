@@ -27,6 +27,9 @@ class Task {
   final DateTime? completedAt;
   final DateTime createdAt;
   final Duration? timeEstimate;
+  final bool isImportant;
+  final bool isUrgent;
+  final bool constrainedToWorkingHours;
 
   Task({
     required this.id,
@@ -43,6 +46,9 @@ class Task {
     this.completedAt,
     required this.createdAt,
     this.timeEstimate,
+    this.isImportant = false,
+    this.isUrgent = false,
+    this.constrainedToWorkingHours = true,
   });
 
   factory Task.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, {required DateTime now}) {
@@ -63,6 +69,9 @@ class Task {
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? now,
       timeEstimate: estimateMinutes != null ? Duration(minutes: estimateMinutes) : null,
+      isImportant: data['isImportant'] as bool? ?? false,
+      isUrgent: data['isUrgent'] as bool? ?? false,
+      constrainedToWorkingHours: data['constrainedToWorkingHours'] as bool? ?? true,
     );
   }
 
@@ -81,6 +90,9 @@ class Task {
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'timeEstimateMinutes': timeEstimate?.inMinutes,
+      'isImportant': isImportant,
+      'isUrgent': isUrgent,
+      'constrainedToWorkingHours': constrainedToWorkingHours,
     };
   }
 
@@ -96,6 +108,9 @@ class Task {
     bool? isCompleted,
     DateTime? completedAt,
     Object? timeEstimate = _unset,
+    bool? isImportant,
+    bool? isUrgent,
+    bool? constrainedToWorkingHours,
   }) {
     return Task(
       id: id,
@@ -112,6 +127,9 @@ class Task {
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt,
       timeEstimate: identical(timeEstimate, _unset) ? this.timeEstimate : timeEstimate as Duration?,
+      isImportant: isImportant ?? this.isImportant,
+      isUrgent: isUrgent ?? this.isUrgent,
+      constrainedToWorkingHours: constrainedToWorkingHours ?? this.constrainedToWorkingHours,
     );
   }
 }

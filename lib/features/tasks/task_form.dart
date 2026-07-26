@@ -38,6 +38,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   RecurrenceRule _recurrenceRule = RecurrenceRule.daily;
   List<String> _categoryIds = [];
   String? _linkedGoalId;
+  bool _isImportant = false;
+  bool _isUrgent = false;
 
   @override
   void initState() {
@@ -50,6 +52,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
       _recurrenceRule = task.recurrenceRule ?? RecurrenceRule.daily;
       _categoryIds = [...task.categoryIds];
       _linkedGoalId = task.linkedGoalId;
+      _isImportant = task.isImportant;
+      _isUrgent = task.isUrgent;
       final estimate = task.timeEstimate;
       if (estimate != null) {
         final parts = DurationParts.fromDuration(estimate);
@@ -139,6 +143,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
             categoryIds: _categoryIds,
             linkedGoalId: _linkedGoalId,
             timeEstimate: _timeEstimate,
+            isImportant: _isImportant,
+            isUrgent: _isUrgent,
           )
           .catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
@@ -157,6 +163,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
             // not silently carry it over (and skip that goal's cap).
             contributesToCount: goalChanged ? false : null,
             timeEstimate: _timeEstimate,
+            isImportant: _isImportant,
+            isUrgent: _isUrgent,
           ))
           .catchError((e) => ref.read(errorReporterProvider).report(e));
     }
@@ -251,6 +259,18 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
               title: const Text('Recurrent'),
               value: _isRecurrent,
               onChanged: (v) => setState(() => _isRecurrent = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Important'),
+              value: _isImportant,
+              onChanged: (v) => setState(() => _isImportant = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Urgent'),
+              value: _isUrgent,
+              onChanged: (v) => setState(() => _isUrgent = v),
             ),
             if (_isRecurrent)
               DropdownButtonFormField<RecurrenceRule>(

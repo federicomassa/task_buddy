@@ -5,11 +5,7 @@ import '../models/user_settings.dart';
 abstract class UserSettingsRepository {
   Stream<UserSettings> streamSettings(String userId);
 
-  Future<void> updateReminder({
-    required String userId,
-    required bool enabled,
-    required int minutes,
-  });
+  Future<void> updateSettings({required String userId, required UserSettings settings});
 }
 
 class FirestoreUserSettingsRepository implements UserSettingsRepository {
@@ -25,14 +21,7 @@ class FirestoreUserSettingsRepository implements UserSettingsRepository {
   }
 
   @override
-  Future<void> updateReminder({
-    required String userId,
-    required bool enabled,
-    required int minutes,
-  }) {
-    return _collection.doc(userId).set(
-      UserSettings(reminderEnabled: enabled, reminderMinutes: minutes).toFirestore(),
-      SetOptions(merge: true),
-    );
+  Future<void> updateSettings({required String userId, required UserSettings settings}) {
+    return _collection.doc(userId).set(settings.toFirestore(), SetOptions(merge: true));
   }
 }

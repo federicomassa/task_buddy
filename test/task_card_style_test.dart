@@ -7,7 +7,7 @@ void main() {
   final today = DateTime(2026, 7, 22);
   final yesterday = DateTime(2026, 7, 21);
 
-  Task buildTask({DateTime? dueDate, Duration? timeEstimate}) {
+  Task buildTask({DateTime? dueDate, Duration? timeEstimate, bool isCompleted = false}) {
     return Task(
       id: 't1',
       userId: 'u1',
@@ -15,7 +15,7 @@ void main() {
       dueDate: dueDate,
       isRecurrent: false,
       categoryIds: const [],
-      isCompleted: false,
+      isCompleted: isCompleted,
       createdAt: today,
       timeEstimate: timeEstimate,
     );
@@ -88,6 +88,11 @@ void main() {
 
     test('dueDate today is not overdue', () {
       final task = buildTask(dueDate: DateTime(2026, 7, 22, 23, 59));
+      expect(isTaskOverdue(task, today: today), false);
+    });
+
+    test('completed task with past dueDate is not overdue', () {
+      final task = buildTask(dueDate: yesterday, isCompleted: true);
       expect(isTaskOverdue(task, today: today), false);
     });
   });

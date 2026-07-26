@@ -1,18 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/date_filter.dart';
+import '../../core/filter_state.dart';
+import '../../core/task_card_style.dart';
 import '../../models/category.dart';
 import '../../models/task.dart';
 import '../../providers/app_providers.dart';
-import '../../widgets/category_pickers.dart';
+import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/settings_button.dart';
 import '../../widgets/sign_out_button.dart';
 import '../../widgets/task_tile.dart';
 import 'task_form.dart';
 
-List<Task> filterTasks(List<Task> tasks, TaskFilter filter, String? categoryId) {
+export '../../core/filter_state.dart' show TaskFilter;
+
+List<Task> filterTasks(
+  List<Task> tasks,
+  TaskFilter filter,
+  String? categoryId,
+  DateRangeFilter dateFilter, {
+  required DateTime today,
+}) {
   List<Task> result;
   switch (filter) {
+    case TaskFilter.all:
+      result = List.of(tasks);
+      break;
     case TaskFilter.active:
       final active = tasks.where((t) => !t.isCompleted && t.dueDate != null).toList();
       active.sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
@@ -28,33 +42,17 @@ List<Task> filterTasks(List<Task> tasks, TaskFilter filter, String? categoryId) 
   if (categoryId != null) {
     result = result.where((t) => t.categoryIds.contains(categoryId)).toList();
   }
+  result = result
+      .where(
+        (t) => matchesTimeFilter(
+          dueDate: t.dueDate,
+          isOverdue: isTaskOverdue(t, today: today),
+          filter: dateFilter,
+          today: today,
+        ),
+      )
+      .toList();
   return result;
-}
-
-enum TaskFilter { active, completed, backlog }
-
-extension on TaskFilter {
-  String get label {
-    switch (this) {
-      case TaskFilter.active:
-        return 'Active';
-      case TaskFilter.completed:
-        return 'Done';
-      case TaskFilter.backlog:
-        return 'Backlog';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case TaskFilter.active:
-        return Icons.flag_outlined;
-      case TaskFilter.completed:
-        return Icons.check_circle_outline;
-      case TaskFilter.backlog:
-        return Icons.inbox_outlined;
-    }
-  }
 }
 
 class TasksScreen extends ConsumerStatefulWidget {
@@ -65,11 +63,10 @@ class TasksScreen extends ConsumerStatefulWidget {
 }
 
 class _TasksScreenState extends ConsumerState<TasksScreen> {
-  TaskFilter _filter = TaskFilter.active;
-  String? _categoryFilter;
-
-  String _emptyMessage() {
-    switch (_filter) {
+  String _emptyMessage(TaskFilter filter) {
+    switch (filter) {
+      case TaskFilter.all:
+        return 'No tasks yet.';
       case TaskFilter.active:
         return 'No active tasks with a due date.';
       case TaskFilter.completed:
@@ -84,11 +81,23 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final tasksAsync = ref.watch(tasksStreamProvider);
     final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
     final taskRepo = ref.read(taskRepositoryProvider);
+    final filterState = ref.watch(taskFilterProvider);
+    final today = ref.watch(todayProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks'),
-        actions: const [SettingsButton(), SignOutButton()],
+        actions: [
+          IconButton(
+            icon: Badge(
+              isLabelVisible: !filterState.isDefault,
+              child: const Icon(Icons.filter_list),
+            ),
+            onPressed: () => showTaskFilterSheet(context, ref),
+          ),
+          const SettingsButton(),
+          const SignOutButton(),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showTaskFormDialog(context),
@@ -96,36 +105,18 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: SegmentedButton<TaskFilter>(
-              segments: TaskFilter.values
-                  .map(
-                    (f) => ButtonSegment(
-                      value: f,
-                      label: Text(f.label),
-                      icon: Icon(f.icon, size: 18),
-                    ),
-                  )
-                  .toList(),
-              selected: {_filter},
-              onSelectionChanged: (selection) => setState(() => _filter = selection.first),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: CategoryFilterBar(
-              categories: categories,
-              selectedId: _categoryFilter,
-              onChanged: (id) => setState(() => _categoryFilter = id),
-            ),
-          ),
           Expanded(
             child: tasksAsync.when(
               data: (tasks) {
-                final filtered = filterTasks(tasks, _filter, _categoryFilter);
+                final filtered = filterTasks(
+                  tasks,
+                  filterState.status,
+                  filterState.categoryId,
+                  filterState.dateFilter,
+                  today: today,
+                );
                 if (filtered.isEmpty) {
-                  return Center(child: Text(_emptyMessage()));
+                  return Center(child: Text(_emptyMessage(filterState.status)));
                 }
                 return ListView.builder(
                   itemCount: filtered.length,

@@ -11,6 +11,137 @@ import '../../providers/app_providers.dart';
 import '../tasks/task_form.dart';
 
 const double _dayHeight = 24 * pxPerHour;
+const double _leftGutter = 52;
+const double _rightMargin = 4;
+// How far each successive overlapping column is pushed right, as a fraction
+// of the available width — the first (non-overlapping) column is always at
+// offset 0, i.e. unaffected and full width, per the cascading design.
+const double _columnOffsetFraction = 0.18;
+const double _minColumnWidth = 40.0;
+// Tiny-chip collision packing: the max width a chip's title text is measured
+// and rendered at (longer titles are clipped with an ellipsis), the gap kept
+// between two colliding chips, and the padding added on top of the measured
+// text width to get the chip's full footprint.
+const double _tinyChipMaxTextWidth = 110.0;
+const double _tinyChipGap = 4.0;
+const double _tinyChipHorizontalPadding = 8.0; // matches chip's horizontal:4 padding * 2
+
+/// Real rendered width of a tiny chip's title, for width-aware collision
+/// packing (see [packChipsAvoidingOverlap]) — capped to [_tinyChipMaxTextWidth]
+/// (the same cap applied when actually rendering the chip's [Text], via a
+/// [ConstrainedBox] in [_buildTinyChip]) and respecting the device's text
+/// scale, so measurement and rendering can't drift apart.
+double _measureTinyChipTextWidth(BuildContext context, String text) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: const TextStyle(fontSize: 10)),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  return painter.width;
+}
+
+/// The floating title chip for a tiny (< [tinyThresholdMinutes]-minute) task's
+/// block — darker than the bar so it also reads against a plain page
+/// background, shifted left by [chipRightInset] (see
+/// [packChipsAvoidingOverlap]) so it clears whatever tiny task's chip it's
+/// closest to in time. Shared between [_TinyChipLabel] (the real, always-on-
+/// top rendering) and [_ScheduledBlock]'s drag-feedback ghost.
+Widget _buildTinyChip({
+  required Task task,
+  required bool isPrimary,
+  required Color barColor,
+  required double chipRightInset,
+}) {
+  final chipColor = Color.alphaBlend(Colors.black.withValues(alpha: 0.25), barColor);
+  return Container(
+    margin: EdgeInsets.only(right: 2 + chipRightInset),
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+    decoration: BoxDecoration(
+      color: chipColor,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: _tinyChipMaxTextWidth),
+      child: Text(
+        isPrimary ? task.title : '↳ ${task.title}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white, fontSize: 10),
+      ),
+    ),
+  );
+}
+
+/// Left/width for a segment's rendering column, per the Google-Calendar-style
+/// cascade: the first column (no overlap) keeps its full natural width
+/// untouched; each later, overlapping column is pushed further right by a
+/// fraction of the available width and shares the same right edge as the
+/// rest, so it overlaps (rather than shrinks) everything under it. Shared by
+/// [_ScheduledBlock] and [_TinyChipLabel] so a tiny task's floating chip
+/// lines up with its own bar's column.
+({double left, double width}) _cascadeColumnGeometry({
+  required int columnIndex,
+  required double availableWidth,
+}) {
+  final columnOffset = availableWidth * _columnOffsetFraction;
+  final rightEdge = _leftGutter + availableWidth;
+  final left = (_leftGutter + columnIndex * columnOffset).clamp(_leftGutter, rightEdge - _minColumnWidth);
+  final width = (rightEdge - left).clamp(_minColumnWidth, availableWidth);
+  return (left: left, width: width);
+}
+
+/// The floating title chip for one tiny task's block, rendered as its own
+/// top-level layer (see _DayCalendarViewState._buildBlocks) so it always
+/// paints on top of every task bar, regardless of which overlap column the
+/// bar itself is in. Purely visual — [IgnorePointer]'d, since the tap/drag
+/// target for a tiny task is the envelope-sized hit area on its
+/// [_ScheduledBlock], which already covers the area the chip visually
+/// occupies.
+class _TinyChipLabel extends StatelessWidget {
+  final Task task;
+  final DateTime today;
+  final TimeRange segment;
+  final bool isPrimary;
+  final int columnIndex;
+  final double availableWidth;
+  final double chipRightInset;
+
+  const _TinyChipLabel({
+    required this.task,
+    required this.today,
+    required this.segment,
+    required this.isPrimary,
+    required this.columnIndex,
+    required this.availableWidth,
+    required this.chipRightInset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final geometry = segmentGeometry(segment: segment, dayHeightPx: _dayHeight, pxPerHour: pxPerHour);
+    final style = taskCardStyle(task, today: today);
+    final column = _cascadeColumnGeometry(columnIndex: columnIndex, availableWidth: availableWidth);
+    final envelope = tinyBlockEnvelope(barHeight: geometry.height, labelAllocation: tinyChipLabelAllocation);
+
+    return Positioned(
+      top: geometry.top - envelope.topOffset,
+      left: column.left,
+      width: column.width,
+      height: envelope.envelopeHeight,
+      child: IgnorePointer(
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: _buildTinyChip(
+            task: task,
+            isPrimary: isPrimary,
+            barColor: style.color,
+            chipRightInset: chipRightInset,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 enum _DropDialogResult { cancel, scheduleAnyway, respectBreaks }
 
@@ -98,22 +229,101 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
         ));
   }
 
-  List<Widget> _blocksForTask(Task task) {
-    final segments = task.estimatedExecutionTimeRanges
-        .map((r) => TimeRange(
-              startMinutes: r.start.hour * 60 + r.start.minute,
-              endMinutes: r.end.hour * 60 + r.end.minute,
-            ))
-        .toList();
+  List<_RenderSegment> _flattenSegments(List<Task> tasks) {
     return [
-      for (var i = 0; i < segments.length; i++)
+      for (final task in tasks)
+        for (var i = 0; i < task.estimatedExecutionTimeRanges.length; i++)
+          _RenderSegment(
+            task: task,
+            range: TimeRange(
+              startMinutes: task.estimatedExecutionTimeRanges[i].start.hour * 60 +
+                  task.estimatedExecutionTimeRanges[i].start.minute,
+              endMinutes: task.estimatedExecutionTimeRanges[i].end.hour * 60 +
+                  task.estimatedExecutionTimeRanges[i].end.minute,
+            ),
+            isPrimary: i == 0,
+            segmentIndex: i,
+          ),
+    ];
+  }
+
+  List<Widget> _buildBlocks(BuildContext context, List<_RenderSegment> renderSegments, double maxWidth) {
+    final availableWidth = (maxWidth - _leftGutter - _rightMargin).clamp(0.0, double.infinity);
+
+    final columnsById = {
+      for (final c in assignColumns([
+        for (final s in renderSegments)
+          LayoutInterval(id: s.layoutId, startMinutes: s.range.startMinutes, endMinutes: s.range.endMinutes),
+      ]))
+        c.id: c,
+    };
+
+    final geometries = {
+      for (final s in renderSegments)
+        s.layoutId: segmentGeometry(segment: s.range, dayHeightPx: _dayHeight, pxPerHour: pxPerHour),
+    };
+
+    // Every rendering column's box shares the same right edge (see
+    // _ScheduledBlock's cascade layout), so every tiny chip's Align(centerRight)
+    // anchors to the same absolute pixel position regardless of columnIndex —
+    // collision packing therefore has to consider ALL tiny chips together in
+    // one global pass, not grouped by column.
+    final tinyChipBoxes = <ChipBox>[];
+    for (final s in renderSegments) {
+      final geometry = geometries[s.layoutId]!;
+      if (!geometry.isTiny) continue;
+      final envelope = tinyBlockEnvelope(barHeight: geometry.height, labelAllocation: tinyChipLabelAllocation);
+      final label = s.isPrimary ? s.task.title : '↳ ${s.task.title}';
+      final textWidth = _measureTinyChipTextWidth(context, label).clamp(0.0, _tinyChipMaxTextWidth);
+      tinyChipBoxes.add(ChipBox(
+        id: s.layoutId,
+        top: geometry.top - envelope.topOffset,
+        bottom: geometry.top - envelope.topOffset + envelope.envelopeHeight,
+        width: textWidth + _tinyChipHorizontalPadding,
+      ));
+    }
+    final chipPlacementById = {
+      for (final p in packChipsAvoidingOverlap(tinyChipBoxes, gap: _tinyChipGap)) p.id: p,
+    };
+
+    // Paint later (further-right-offset) columns on top, Google-Calendar
+    // style, so an offset task reads as sitting above the ones it overlaps
+    // rather than being hidden underneath them.
+    final ordered = [...renderSegments]
+      ..sort((a, b) => columnsById[a.layoutId]!.columnIndex.compareTo(columnsById[b.layoutId]!.columnIndex));
+
+    final bars = [
+      for (final s in ordered)
         _ScheduledBlock(
-          task: task,
+          task: s.task,
           today: widget.today,
-          segment: segments[i],
-          isPrimary: i == 0,
+          segment: s.range,
+          isPrimary: s.isPrimary,
+          columnIndex: columnsById[s.layoutId]!.columnIndex,
+          availableWidth: availableWidth,
+          chipRightInset: chipPlacementById[s.layoutId]?.rightInset ?? 0.0,
         ),
     ];
+
+    // Tiny-task title chips are their own layer, appended after every bar, so
+    // a chip always paints on top of every task box — including bars from
+    // later, higher-cascade-column tasks that would otherwise paint over it —
+    // rather than z-order being tied to each block's own bar-vs-chip stack.
+    final labels = [
+      for (final s in renderSegments)
+        if (geometries[s.layoutId]!.isTiny)
+          _TinyChipLabel(
+            task: s.task,
+            today: widget.today,
+            segment: s.range,
+            isPrimary: s.isPrimary,
+            columnIndex: columnsById[s.layoutId]!.columnIndex,
+            availableWidth: availableWidth,
+            chipRightInset: chipPlacementById[s.layoutId]?.rightInset ?? 0.0,
+          ),
+    ];
+
+    return [...bars, ...labels];
   }
 
   @override
@@ -123,6 +333,7 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
     final dragPreview = ref.watch(dragPreviewProvider);
     final previewMinutes =
         dragPreview == null ? null : _snappedMinutesForOffset(dragPreview.globalPosition);
+    final renderSegments = _flattenSegments(scheduledTasks);
 
     return DragTarget<Task>(
       onAcceptWithDetails: (details) => _handleDrop(details.data, details.offset),
@@ -131,23 +342,45 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
           child: SizedBox(
             key: _stackKey,
             height: _dayHeight,
-            child: Stack(
-              children: [
-                _HourGrid(),
-                _OffHoursShading(activeHours: activeHours),
-                for (final task in scheduledTasks) ..._blocksForTask(task),
-                if (previewMinutes != null)
-                  _DropPreview(
-                    minutes: previewMinutes,
-                    height: taskBlockHeight(dragPreview!.task),
-                  ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  children: [
+                    _HourGrid(),
+                    _OffHoursShading(activeHours: activeHours),
+                    ..._buildBlocks(context, renderSegments, constraints.maxWidth),
+                    if (previewMinutes != null)
+                      _DropPreview(
+                        minutes: previewMinutes,
+                        height: taskBlockHeight(dragPreview!.task),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         );
       },
     );
   }
+}
+
+/// One real-time segment to render, carrying enough identity to map back
+/// through [assignColumns]'s [ColumnAssignment.id].
+class _RenderSegment {
+  final Task task;
+  final TimeRange range;
+  final bool isPrimary;
+  final int segmentIndex;
+
+  const _RenderSegment({
+    required this.task,
+    required this.range,
+    required this.isPrimary,
+    required this.segmentIndex,
+  });
+
+  Object get layoutId => (task.id, segmentIndex);
 }
 
 class _HourGrid extends StatelessWidget {
@@ -260,7 +493,7 @@ class _DropPreview extends StatelessWidget {
 
 /// One block for one real-time segment of a scheduled task. A task whose
 /// duration spans a break renders as multiple of these (one per side of the
-/// break) via [_DayCalendarViewState._blocksForTask]; only the first
+/// break) via [_DayCalendarViewState._flattenSegments]; only the first
 /// ([isPrimary]) segment is draggable, so dragging always has a single,
 /// unambiguous handle.
 class _ScheduledBlock extends ConsumerWidget {
@@ -268,24 +501,30 @@ class _ScheduledBlock extends ConsumerWidget {
   final DateTime today;
   final TimeRange segment;
   final bool isPrimary;
+  final int columnIndex;
+  final double availableWidth;
+  final double chipRightInset;
 
   const _ScheduledBlock({
     required this.task,
     required this.today,
     required this.segment,
     required this.isPrimary,
+    required this.columnIndex,
+    required this.availableWidth,
+    required this.chipRightInset,
   });
-
-  // Below this, the bar is too short to fit even one line of text.
-  static const double _tinyThresholdMinutes = 15;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final top = segment.startMinutes / 60 * pxPerHour;
-    final rawHeight = (segment.endMinutes - segment.startMinutes) / 60 * pxPerHour;
-    final height = rawHeight < 1.0 ? 1.0 : (rawHeight > _dayHeight - top ? _dayHeight - top : rawHeight);
-    final isTiny = segment.endMinutes - segment.startMinutes < _tinyThresholdMinutes;
+    final geometry = segmentGeometry(segment: segment, dayHeightPx: _dayHeight, pxPerHour: pxPerHour);
+    final top = geometry.top;
+    final height = geometry.height;
+    final isTiny = geometry.isTiny;
     final style = taskCardStyle(task, today: today);
+    final column = _cascadeColumnGeometry(columnIndex: columnIndex, availableWidth: availableWidth);
+    final left = column.left;
+    final renderedWidth = column.width;
 
     final bar = Container(
       // A hard height (not just a minimum) so the block's on-screen size
@@ -297,11 +536,11 @@ class _ScheduledBlock extends ConsumerWidget {
       decoration: BoxDecoration(
         color: style.color.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(4),
-        // A border in the page background color, rather than no border at
-        // all, so back-to-back blocks (one ending exactly when the next
-        // begins) still show a visible seam instead of reading as one
-        // continuous slab.
-        border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
+        // A visibly dark seam (rather than a page-background-colored one, or
+        // no border at all) so back-to-back blocks (one ending exactly when
+        // the next begins) show a clear boundary instead of reading as one
+        // continuous slab or looking like there's whitespace between them.
+        border: Border.all(color: Colors.black.withValues(alpha: 0.35), width: 1.5),
       ),
       padding: isTiny ? null : const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       alignment: isTiny ? null : Alignment.topLeft,
@@ -315,84 +554,82 @@ class _ScheduledBlock extends ConsumerWidget {
             ),
     );
 
+    // The bar-only interactive content. For tiny tasks, the title itself is
+    // NOT rendered here — it renders as a separate _TinyChipLabel layer, added
+    // after every task's bar in _DayCalendarViewState._buildBlocks, so a tiny
+    // task's floating label always paints on top of every bar (including ones
+    // from later, higher-cascade-column tasks) rather than being tucked
+    // underneath them. This box is still sized to the label's full envelope
+    // (below), so tapping/dragging anywhere the (separately-painted) chip
+    // visually appears still hits this same interactive area.
     Widget content = SizedBox(height: height, child: bar);
     // How far above the segment's real start time this block's wrapping box
     // (and therefore its tap/drag hit-test area) needs to begin, to fully
     // cover a floating label that pokes out past the bar. Zero for
     // normal-sized tasks.
     var topOffset = 0.0;
+    // Only used for the drag-feedback ghost (see LongPressDraggable.feedback
+    // below): since that ghost floats alone above everything else during a
+    // drag, there's no cross-task z-order concern for it, so it can just
+    // recombine the bar and chip visually, the way `content` used to before
+    // tiny chips became their own top-level layer.
+    Widget feedbackContent = content;
 
     if (isTiny) {
-      // Below the `_tinyThresholdMinutes` bar is too short to hold any
-      // legible text at all (down to a couple of px for a 5-minute task),
-      // so instead of cramming/clipping the title inside it, the title is a
-      // separate chip floating on top — darker than the bar so it also
-      // reads against a plain white page background — vertically centered
-      // on the bar and pushed to its right edge, so it's less likely to
-      // land exactly on top of the same floating label for whatever task is
-      // stacked immediately above or below it.
+      // Below the `tinyThresholdMinutes` bar is too short to hold any
+      // legible text at all (down to a couple of px for a 5-minute task), so
+      // its title is rendered by a separate _TinyChipLabel widget instead of
+      // here — see that class and the comment on `content` above.
       //
-      // The chip has no fixed height: its size comes entirely from padding
-      // around the text, so it grows automatically with the user's system
-      // text-scale/accessibility settings instead of being tuned for one
-      // assumed font size and clipping (or looking oddly empty) on a device
-      // with different settings.
-      final chipColor = Color.alphaBlend(Colors.black.withValues(alpha: 0.25), style.color);
-      final chip = Container(
-        margin: const EdgeInsets.only(right: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
-        decoration: BoxDecoration(
-          color: chipColor,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          isPrimary ? task.title : '↳ ${task.title}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      );
-
-      // Pinning this to the segment's own height via `top: 0, bottom: 0`
+      // Pinning this box to the segment's own height via `top: 0, bottom: 0`
       // (as a previous version did) constrains the label's *available*
       // height to match — for a 5-minute task that's a handful of px, and
       // once the chip's padding is subtracted from that the child is left
       // with ~0 (or negative, clamped to 0) height to render into, which is
       // why the text disappeared entirely rather than just spilling over a
       // bit. Giving it real headroom (anchored to the segment's vertical
-      // midpoint, not its height) fixes that; `Align` still only makes the
-      // *visible* chip as big as its own text needs (see the note on
-      // Container above), so this headroom doesn't force the chip to look
-      // stretched or oversized — it's just room to lay out in.
-      const labelAllocation = 32.0;
-
-      // The chip is centered on the bar's midpoint and (for a genuinely
-      // tiny task) is taller than the bar itself, so it pokes out above and
-      // below by this much. Rather than let it visually overflow past the
-      // wrapping box (which would make it unclickable — a widget's hit
-      // testing rejects taps outside its own laid-out size, before it ever
-      // asks its children), the wrapping box is grown to this full envelope
-      // and shifted up to compensate, so the tap/drag target actually
-      // covers the whole visible chip.
-      final envelope = tinyBlockEnvelope(barHeight: height, labelAllocation: labelAllocation);
+      // midpoint, not its height) fixes that.
+      //
+      // The chip is centered on the bar's midpoint and (for a genuinely tiny
+      // task) is taller than the bar itself, so it pokes out above and below
+      // by this much. Rather than let it visually overflow past the wrapping
+      // box (which would make it unclickable — a widget's hit testing
+      // rejects taps outside its own laid-out size, before it ever asks its
+      // children), the wrapping box is grown to this full envelope and
+      // shifted up to compensate, so the tap/drag target actually covers the
+      // whole visible chip.
+      final envelope = tinyBlockEnvelope(barHeight: height, labelAllocation: tinyChipLabelAllocation);
       final overflow = envelope.topOffset;
       final envelopeHeight = envelope.envelopeHeight;
       topOffset = overflow;
-
-      final label = Positioned(
-        top: (envelopeHeight - labelAllocation) / 2,
-        height: labelAllocation,
-        left: 0,
-        right: 0,
-        child: Align(alignment: Alignment.centerRight, child: chip),
-      );
 
       content = SizedBox(
         height: envelopeHeight,
         child: Stack(
           children: [
             Positioned(top: overflow, left: 0, right: 0, height: height, child: bar),
-            label,
+          ],
+        ),
+      );
+
+      final chip = _buildTinyChip(
+        task: task,
+        isPrimary: isPrimary,
+        barColor: style.color,
+        chipRightInset: chipRightInset,
+      );
+      feedbackContent = SizedBox(
+        height: envelopeHeight,
+        child: Stack(
+          children: [
+            Positioned(top: overflow, left: 0, right: 0, height: height, child: bar),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: envelopeHeight,
+              child: Align(alignment: Alignment.centerRight, child: chip),
+            ),
           ],
         ),
       );
@@ -406,8 +643,8 @@ class _ScheduledBlock extends ConsumerWidget {
 
     return Positioned(
       top: top - topOffset,
-      left: 52,
-      right: 4,
+      left: left,
+      width: renderedWidth,
       child: (!isPrimary || task.estimatedDuration == null)
           ? tappable
           : LongPressDraggable<Task>(
@@ -418,7 +655,7 @@ class _ScheduledBlock extends ConsumerWidget {
               dragAnchorStrategy: pointerDragAnchorStrategy,
               feedback: Material(
                 color: Colors.transparent,
-                child: SizedBox(width: 220, child: content),
+                child: SizedBox(width: 220, child: feedbackContent),
               ),
               childWhenDragging: Opacity(opacity: 0.3, child: tappable),
               onDragUpdate: ref.onTaskDragUpdate(task),

@@ -23,7 +23,7 @@ Future<DateTime?> pickDueDateWithDefaultTime(
     context: context,
     initialTime: initialDate != null
         ? TimeOfDay.fromDateTime(initialDate)
-        : TimeOfDay.fromDateTime(nowForTimeDefault),
+        : const TimeOfDay(hour: 23, minute: 59),
   );
 
   return DateTime(

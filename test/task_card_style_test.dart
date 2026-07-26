@@ -7,7 +7,7 @@ void main() {
   final today = DateTime(2026, 7, 22);
   final yesterday = DateTime(2026, 7, 21);
 
-  Task buildTask({DateTime? dueDate, Duration? timeEstimate, bool isCompleted = false}) {
+  Task buildTask({DateTime? dueDate, Duration? estimatedDuration, bool isCompleted = false}) {
     return Task(
       id: 't1',
       userId: 'u1',
@@ -17,13 +17,13 @@ void main() {
       categoryIds: const [],
       isCompleted: isCompleted,
       createdAt: today,
-      timeEstimate: timeEstimate,
+      estimatedDuration: estimatedDuration,
     );
   }
 
   group('taskCardStyle', () {
     test('due today with estimate is blue, height scales with duration', () {
-      final task = buildTask(dueDate: today, timeEstimate: const Duration(minutes: 90));
+      final task = buildTask(dueDate: today, estimatedDuration: const Duration(minutes: 90));
       final style = taskCardStyle(task, today: today);
       expect(style.color, Colors.blue);
       expect(style.height, 90);
@@ -37,7 +37,7 @@ void main() {
     });
 
     test('overdue with estimate is red', () {
-      final task = buildTask(dueDate: yesterday, timeEstimate: const Duration(hours: 1));
+      final task = buildTask(dueDate: yesterday, estimatedDuration: const Duration(hours: 1));
       final style = taskCardStyle(task, today: today);
       expect(style.color, Colors.red);
       expect(style.height, 60);
@@ -51,13 +51,13 @@ void main() {
     });
 
     test('height is clamped to max for very long estimates', () {
-      final task = buildTask(dueDate: today, timeEstimate: const Duration(hours: 10));
+      final task = buildTask(dueDate: today, estimatedDuration: const Duration(hours: 10));
       final style = taskCardStyle(task, today: today);
       expect(style.height, 200);
     });
 
     test('height is clamped to min for very short estimates', () {
-      final task = buildTask(dueDate: today, timeEstimate: const Duration(minutes: 1));
+      final task = buildTask(dueDate: today, estimatedDuration: const Duration(minutes: 1));
       final style = taskCardStyle(task, today: today);
       expect(style.height, 40);
     });
@@ -65,7 +65,7 @@ void main() {
 
   group('taskBlockHeight', () {
     test('unclamped and reflects real duration', () {
-      final task = buildTask(dueDate: today, timeEstimate: const Duration(hours: 10));
+      final task = buildTask(dueDate: today, estimatedDuration: const Duration(hours: 10));
       expect(taskBlockHeight(task), 600);
     });
 

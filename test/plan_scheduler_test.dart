@@ -16,7 +16,7 @@ void main() {
       categoryIds: const [],
       isCompleted: false,
       createdAt: today,
-      timeEstimate: Duration(minutes: minutes),
+      estimatedDuration: Duration(minutes: minutes),
       isImportant: isImportant,
       isUrgent: isUrgent,
     );
@@ -33,8 +33,12 @@ void main() {
         today: today,
       );
 
-      expect(result.scheduledTimes['high'], DateTime(2026, 7, 22, 9, 0));
-      expect(result.scheduledTimes['low'], DateTime(2026, 7, 22, 9, 30));
+      expect(result.scheduledRanges['high'], [
+        TaskTimeRange(start: DateTime(2026, 7, 22, 9, 0), end: DateTime(2026, 7, 22, 9, 30)),
+      ]);
+      expect(result.scheduledRanges['low'], [
+        TaskTimeRange(start: DateTime(2026, 7, 22, 9, 30), end: DateTime(2026, 7, 22, 10, 0)),
+      ]);
       expect(result.unscheduled, isEmpty);
     });
 
@@ -57,10 +61,16 @@ void main() {
 
       // `big` (150min) starts at 9:00 and, on the continuous timeline, runs
       // through the whole morning window (120min) plus 30 more minutes —
-      // which land at 13:00-13:30 once mapped back to real time. `small`
-      // then starts exactly where `big`'s virtual time left off: 13:30.
-      expect(result.scheduledTimes['big'], DateTime(2026, 7, 22, 9, 0));
-      expect(result.scheduledTimes['small'], DateTime(2026, 7, 22, 13, 30));
+      // which splits into a morning segment and a 13:00-13:30 segment once
+      // mapped back to real time. `small` then starts exactly where `big`'s
+      // virtual time left off: 13:30.
+      expect(result.scheduledRanges['big'], [
+        TaskTimeRange(start: DateTime(2026, 7, 22, 9, 0), end: DateTime(2026, 7, 22, 11, 0)),
+        TaskTimeRange(start: DateTime(2026, 7, 22, 13, 0), end: DateTime(2026, 7, 22, 13, 30)),
+      ]);
+      expect(result.scheduledRanges['small'], [
+        TaskTimeRange(start: DateTime(2026, 7, 22, 13, 30), end: DateTime(2026, 7, 22, 14, 30)),
+      ]);
       expect(result.unscheduled, isEmpty);
     });
 
@@ -73,7 +83,7 @@ void main() {
         today: today,
       );
 
-      expect(result.scheduledTimes, isEmpty);
+      expect(result.scheduledRanges, isEmpty);
       expect(result.unscheduled, [task]);
     });
 

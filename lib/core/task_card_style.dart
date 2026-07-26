@@ -27,7 +27,7 @@ class TaskCardStyle {
 /// (clamped so cards stay usable in a scrolling list).
 TaskCardStyle taskCardStyle(Task task, {required DateTime today}) {
   final overdue = isTaskOverdue(task, today: today);
-  final hasEstimate = task.timeEstimate != null;
+  final hasEstimate = task.estimatedDuration != null;
 
   final Color color;
   if (task.isCompleted) {
@@ -40,7 +40,7 @@ TaskCardStyle taskCardStyle(Task task, {required DateTime today}) {
 
   double height = _minCardHeight;
   if (hasEstimate) {
-    final hours = task.timeEstimate!.inMinutes / 60.0;
+    final hours = task.estimatedDuration!.inMinutes / 60.0;
     height = (hours * pxPerHour).clamp(_minCardHeight, _maxCardHeight);
   }
 
@@ -51,7 +51,7 @@ TaskCardStyle taskCardStyle(Task task, {required DateTime today}) {
 /// the calendar grid. Unlike [taskCardStyle]'s height, this is not clamped
 /// to a max so a block's size reflects its real duration.
 double taskBlockHeight(Task task) {
-  final estimate = task.timeEstimate;
+  final estimate = task.estimatedDuration;
   if (estimate == null) return _minCardHeight;
   return (estimate.inMinutes / 60.0) * pxPerHour;
 }

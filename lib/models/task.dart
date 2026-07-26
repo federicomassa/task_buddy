@@ -12,12 +12,44 @@ RecurrenceRule? recurrenceRuleFromString(String? value) {
 
 const _unset = Object();
 
+/// A concrete, wall-clock block of time a task is planned to run in — e.g.
+/// 09:00-10:30 on 2026-07-22. Distinct from [TimeRange] in user_settings.dart
+/// (minutes-since-midnight, no date), which describes a recurring
+/// time-of-day window like active hours, not a specific moment in time.
+class TaskTimeRange {
+  final DateTime start;
+  final DateTime end;
+
+  const TaskTimeRange({required this.start, required this.end});
+
+  Duration get duration => end.difference(start);
+
+  factory TaskTimeRange.fromFirestore(Map<String, dynamic> map) {
+    return TaskTimeRange(
+      start: (map['start'] as Timestamp).toDate(),
+      end: (map['end'] as Timestamp).toDate(),
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+        'start': Timestamp.fromDate(start),
+        'end': Timestamp.fromDate(end),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TaskTimeRange && other.start == start && other.end == end;
+
+  @override
+  int get hashCode => Object.hash(start, end);
+}
+
 class Task {
   final String id;
   final String userId;
   final String title;
   final DateTime? dueDate;
-  final DateTime? scheduledDate;
+  final List<TaskTimeRange> estimatedExecutionTimeRanges;
   final bool isRecurrent;
   final RecurrenceRule? recurrenceRule;
   final List<String> categoryIds;
@@ -26,7 +58,7 @@ class Task {
   final bool isCompleted;
   final DateTime? completedAt;
   final DateTime createdAt;
-  final Duration? timeEstimate;
+  final Duration? estimatedDuration;
   final bool isImportant;
   final bool isUrgent;
   final bool constrainedToWorkingHours;
@@ -36,7 +68,7 @@ class Task {
     required this.userId,
     required this.title,
     this.dueDate,
-    this.scheduledDate,
+    this.estimatedExecutionTimeRanges = const [],
     required this.isRecurrent,
     this.recurrenceRule,
     required this.categoryIds,
@@ -45,7 +77,7 @@ class Task {
     required this.isCompleted,
     this.completedAt,
     required this.createdAt,
-    this.timeEstimate,
+    this.estimatedDuration,
     this.isImportant = false,
     this.isUrgent = false,
     this.constrainedToWorkingHours = true,
@@ -53,13 +85,16 @@ class Task {
 
   factory Task.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, {required DateTime now}) {
     final data = doc.data()!;
-    final estimateMinutes = data['timeEstimateMinutes'] as int?;
+    final estimateMinutes = data['estimatedDurationMinutes'] as int?;
     return Task(
       id: doc.id,
       userId: data['userId'] as String,
       title: data['title'] as String,
       dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
-      scheduledDate: (data['scheduledDate'] as Timestamp?)?.toDate(),
+      estimatedExecutionTimeRanges: (data['estimatedExecutionTimeRanges'] as List<dynamic>?)
+              ?.map((r) => TaskTimeRange.fromFirestore(Map<String, dynamic>.from(r as Map)))
+              .toList() ??
+          const [],
       isRecurrent: data['isRecurrent'] as bool? ?? false,
       recurrenceRule: recurrenceRuleFromString(data['recurrenceRule'] as String?),
       categoryIds: (data['categoryIds'] as List<dynamic>?)?.cast<String>() ?? [],
@@ -68,7 +103,7 @@ class Task {
       isCompleted: data['isCompleted'] as bool? ?? false,
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? now,
-      timeEstimate: estimateMinutes != null ? Duration(minutes: estimateMinutes) : null,
+      estimatedDuration: estimateMinutes != null ? Duration(minutes: estimateMinutes) : null,
       isImportant: data['isImportant'] as bool? ?? false,
       isUrgent: data['isUrgent'] as bool? ?? false,
       constrainedToWorkingHours: data['constrainedToWorkingHours'] as bool? ?? true,
@@ -80,7 +115,7 @@ class Task {
       'userId': userId,
       'title': title,
       'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
-      'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
+      'estimatedExecutionTimeRanges': estimatedExecutionTimeRanges.map((r) => r.toFirestore()).toList(),
       'isRecurrent': isRecurrent,
       'recurrenceRule': recurrenceRule?.name,
       'categoryIds': categoryIds,
@@ -89,7 +124,7 @@ class Task {
       'isCompleted': isCompleted,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
-      'timeEstimateMinutes': timeEstimate?.inMinutes,
+      'estimatedDurationMinutes': estimatedDuration?.inMinutes,
       'isImportant': isImportant,
       'isUrgent': isUrgent,
       'constrainedToWorkingHours': constrainedToWorkingHours,
@@ -99,7 +134,7 @@ class Task {
   Task copyWith({
     String? title,
     Object? dueDate = _unset,
-    Object? scheduledDate = _unset,
+    Object? estimatedExecutionTimeRanges = _unset,
     bool? isRecurrent,
     RecurrenceRule? recurrenceRule,
     List<String>? categoryIds,
@@ -107,7 +142,7 @@ class Task {
     bool? contributesToCount,
     bool? isCompleted,
     DateTime? completedAt,
-    Object? timeEstimate = _unset,
+    Object? estimatedDuration = _unset,
     bool? isImportant,
     bool? isUrgent,
     bool? constrainedToWorkingHours,
@@ -117,7 +152,9 @@ class Task {
       userId: userId,
       title: title ?? this.title,
       dueDate: identical(dueDate, _unset) ? this.dueDate : dueDate as DateTime?,
-      scheduledDate: identical(scheduledDate, _unset) ? this.scheduledDate : scheduledDate as DateTime?,
+      estimatedExecutionTimeRanges: identical(estimatedExecutionTimeRanges, _unset)
+          ? this.estimatedExecutionTimeRanges
+          : estimatedExecutionTimeRanges as List<TaskTimeRange>,
       isRecurrent: isRecurrent ?? this.isRecurrent,
       recurrenceRule: recurrenceRule ?? this.recurrenceRule,
       categoryIds: categoryIds ?? this.categoryIds,
@@ -126,7 +163,7 @@ class Task {
       isCompleted: isCompleted ?? this.isCompleted,
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt,
-      timeEstimate: identical(timeEstimate, _unset) ? this.timeEstimate : timeEstimate as Duration?,
+      estimatedDuration: identical(estimatedDuration, _unset) ? this.estimatedDuration : estimatedDuration as Duration?,
       isImportant: isImportant ?? this.isImportant,
       isUrgent: isUrgent ?? this.isUrgent,
       constrainedToWorkingHours: constrainedToWorkingHours ?? this.constrainedToWorkingHours,

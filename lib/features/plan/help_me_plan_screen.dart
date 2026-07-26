@@ -158,7 +158,7 @@ class _PlanTaskCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final content = TaskEstimateCard(task: task, categories: categories, today: today);
 
-    if (task.timeEstimate == null) {
+    if (task.estimatedDuration == null) {
       // Tasks without a time estimate can't be scored (WSJF needs a
       // duration), so they aren't draggable — tap to add one instead.
       return InkWell(

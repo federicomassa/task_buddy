@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/active_hours.dart';
 import '../../core/calendar_math.dart';
+import '../../core/drop_resolution.dart';
 import '../../core/task_card_style.dart';
 import '../../models/task.dart';
 import '../../models/user_settings.dart';
@@ -11,7 +12,7 @@ import '../tasks/task_form.dart';
 
 const double _dayHeight = 24 * pxPerHour;
 
-enum _DropChoice { cancel, scheduleAnyway, respectBreaks }
+enum _DropDialogResult { cancel, scheduleAnyway, respectBreaks }
 
 /// The Today screen's left-hand pane: a scrollable midnight-to-midnight
 /// timeline showing today's scheduled tasks as positioned blocks, and
@@ -40,36 +41,21 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
     return snappedMinutesForLocalY(local.dy, dayHeightPx: _dayHeight, pxPerHour: pxPerHour);
   }
 
-  DateTime _dateTimeForMinutes(int minutes) {
-    return DateTime(
-      widget.today.year,
-      widget.today.month,
-      widget.today.day,
-      minutes ~/ 60,
-      minutes % 60,
-    );
-  }
-
   Future<void> _handleDrop(Task task, Offset globalOffset) async {
     final snapped = _snappedMinutesForOffset(globalOffset);
     if (snapped == null) return;
 
     final activeHours =
         ref.read(userSettingsStreamProvider).value?.activeHourRanges ?? defaultActiveHourRanges;
-    // Always re-checked against *this* drop, regardless of what the task's
-    // constrainedToWorkingHours currently is — that flag only controls how
-    // the task's existing placement renders (see taskRealSegments), it
-    // isn't a standing "never ask this task again" preference. Otherwise,
-    // once a task was scheduled anyway once, dragging it onto a totally
-    // different break later would silently succeed without asking.
-    final needsConfirmation = violatesActiveHours(snapped, task.timeEstimate?.inMinutes ?? 0, activeHours);
+    final durationMinutes = task.estimatedDuration?.inMinutes ?? 0;
 
-    if (!needsConfirmation) {
-      ref.read(taskRepositoryProvider).scheduleTask(task, _dateTimeForMinutes(snapped));
+    if (!dropNeedsConfirmation(droppedMinutes: snapped, durationMinutes: durationMinutes, activeHours: activeHours)) {
+      final segments = directDropPlacement(droppedMinutes: snapped, durationMinutes: durationMinutes);
+      ref.read(taskRepositoryProvider).scheduleTaskRanges(task, taskTimeRangesForDay(widget.today, segments));
       return;
     }
 
-    final choice = await showDialog<_DropChoice>(
+    final choice = await showDialog<_DropDialogResult>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Outside active hours'),
@@ -78,51 +64,47 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(_DropChoice.cancel),
+            onPressed: () => Navigator.of(dialogContext).pop(_DropDialogResult.cancel),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(_DropChoice.respectBreaks),
+            onPressed: () => Navigator.of(dialogContext).pop(_DropDialogResult.respectBreaks),
             child: const Text('Schedule, but respect breaks'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(_DropChoice.scheduleAnyway),
+            onPressed: () => Navigator.of(dialogContext).pop(_DropDialogResult.scheduleAnyway),
             child: const Text('Schedule anyway'),
           ),
         ],
       ),
     );
 
-    final repo = ref.read(taskRepositoryProvider);
-    switch (choice) {
-      case _DropChoice.scheduleAnyway:
-        // Set on the task itself so it renders as a literal block straight
-        // through this break instead of splitting (see taskRealSegments).
-        // It doesn't suppress future prompts — dragging this same task onto
-        // another violating time will still ask again (see needsConfirmation).
-        await repo.updateTask(
-          task.copyWith(scheduledDate: _dateTimeForMinutes(snapped), constrainedToWorkingHours: false),
-        );
-        break;
-      case _DropChoice.respectBreaks:
-        // If the drop landed inside a break (or before/after the work day),
-        // there's no range for the splitting logic to anchor to, so push
-        // the start forward to when work resumes; otherwise keep the
-        // dropped time as-is and let it split across whatever break it
-        // runs into.
-        final resolved = resolveActiveStart(snapped, activeHours);
-        await repo.updateTask(
-          task.copyWith(scheduledDate: _dateTimeForMinutes(resolved), constrainedToWorkingHours: true),
-        );
-        break;
-      case _DropChoice.cancel:
-      case null:
-        break;
-    }
+    final dropChoice = switch (choice) {
+      _DropDialogResult.scheduleAnyway => DropChoice.scheduleAnyway,
+      _DropDialogResult.respectBreaks => DropChoice.respectBreaks,
+      _DropDialogResult.cancel || null => null,
+    };
+    if (dropChoice == null) return;
+
+    final placement = resolveConfirmedDrop(
+      choice: dropChoice,
+      droppedMinutes: snapped,
+      durationMinutes: durationMinutes,
+      activeHours: activeHours,
+    );
+    await ref.read(taskRepositoryProvider).updateTask(task.copyWith(
+          estimatedExecutionTimeRanges: taskTimeRangesForDay(widget.today, placement.segments),
+          constrainedToWorkingHours: placement.constrainedToWorkingHours,
+        ));
   }
 
-  List<Widget> _blocksForTask(Task task, List<TimeRange> activeHours) {
-    final segments = taskRealSegments(task, activeHours);
+  List<Widget> _blocksForTask(Task task) {
+    final segments = task.estimatedExecutionTimeRanges
+        .map((r) => TimeRange(
+              startMinutes: r.start.hour * 60 + r.start.minute,
+              endMinutes: r.end.hour * 60 + r.end.minute,
+            ))
+        .toList();
     return [
       for (var i = 0; i < segments.length; i++)
         _ScheduledBlock(
@@ -153,7 +135,7 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
               children: [
                 _HourGrid(),
                 _OffHoursShading(activeHours: activeHours),
-                for (final task in scheduledTasks) ..._blocksForTask(task, activeHours),
+                for (final task in scheduledTasks) ..._blocksForTask(task),
                 if (previewMinutes != null)
                   _DropPreview(
                     minutes: previewMinutes,
@@ -392,8 +374,9 @@ class _ScheduledBlock extends ConsumerWidget {
       // asks its children), the wrapping box is grown to this full envelope
       // and shifted up to compensate, so the tap/drag target actually
       // covers the whole visible chip.
-      final overflow = ((labelAllocation - height) / 2).clamp(0.0, double.infinity);
-      final envelopeHeight = height + overflow * 2;
+      final envelope = tinyBlockEnvelope(barHeight: height, labelAllocation: labelAllocation);
+      final overflow = envelope.topOffset;
+      final envelopeHeight = envelope.envelopeHeight;
       topOffset = overflow;
 
       final label = Positioned(
@@ -425,7 +408,7 @@ class _ScheduledBlock extends ConsumerWidget {
       top: top - topOffset,
       left: 52,
       right: 4,
-      child: (!isPrimary || task.timeEstimate == null)
+      child: (!isPrimary || task.estimatedDuration == null)
           ? tappable
           : LongPressDraggable<Task>(
               data: task,

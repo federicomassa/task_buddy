@@ -26,7 +26,7 @@ class TaskScheduleCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final content = TaskEstimateCard(task: task, categories: categories, today: today);
 
-    if (task.timeEstimate == null) {
+    if (task.estimatedDuration == null) {
       // Tasks without a time estimate can't be scheduled on the calendar,
       // so they aren't draggable at all.
       return content;
@@ -99,11 +99,11 @@ class TaskEstimateCard extends StatelessWidget {
               children: [
                 if (overdue)
                   const Text('Overdue', style: TextStyle(color: Colors.red, fontSize: 11)),
-                if (task.timeEstimate != null)
-                  Text('~${formatEstimate(task.timeEstimate!)}', style: const TextStyle(fontSize: 11)),
-                if (task.scheduledDate != null)
+                if (task.estimatedDuration != null)
+                  Text('~${formatEstimate(task.estimatedDuration!)}', style: const TextStyle(fontSize: 11)),
+                if (task.estimatedExecutionTimeRanges.isNotEmpty)
                   Text(
-                    'At ${TimeOfDay.fromDateTime(task.scheduledDate!).format(context)}',
+                    'At ${TimeOfDay.fromDateTime(task.estimatedExecutionTimeRanges.first.start).format(context)}',
                     style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
                   ),
                 for (final c in linkedCategories) CategoryChip(category: c, fontSize: 10),

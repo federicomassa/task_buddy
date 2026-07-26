@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/active_hours.dart';
 import '../../core/duration_parts.dart';
 import '../../models/category.dart';
 import '../../models/goal.dart';
 import '../../models/task.dart';
+import '../../models/user_settings.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/category_pickers.dart';
 import '../../widgets/date_pickers.dart';
@@ -33,7 +35,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   late final TextEditingController _estHoursController = TextEditingController();
   late final TextEditingController _estMinutesController = TextEditingController();
   DateTime? _dueDate;
-  DateTime? _scheduledDate;
+  DateTime? _scheduledDateTime;
+  bool _constrainedToWorkingHours = true;
   bool _isRecurrent = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.daily;
   List<String> _categoryIds = [];
@@ -47,14 +50,16 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     final task = widget.task;
     if (task != null) {
       _dueDate = task.dueDate;
-      _scheduledDate = task.scheduledDate;
+      _scheduledDateTime =
+          task.estimatedExecutionTimeRanges.isNotEmpty ? task.estimatedExecutionTimeRanges.first.start : null;
+      _constrainedToWorkingHours = task.constrainedToWorkingHours;
       _isRecurrent = task.isRecurrent;
       _recurrenceRule = task.recurrenceRule ?? RecurrenceRule.daily;
       _categoryIds = [...task.categoryIds];
       _linkedGoalId = task.linkedGoalId;
       _isImportant = task.isImportant;
       _isUrgent = task.isUrgent;
-      final estimate = task.timeEstimate;
+      final estimate = task.estimatedDuration;
       if (estimate != null) {
         final parts = DurationParts.fromDuration(estimate);
         _estDaysController.text = parts.days.toString();
@@ -90,7 +95,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     final now = ref.read(clockProvider).now();
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _scheduledDate ?? now,
+      initialDate: _scheduledDateTime ?? now,
       firstDate: now.subtract(const Duration(days: 365)),
       lastDate: now.add(const Duration(days: 365 * 3)),
     );
@@ -99,14 +104,14 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     if (!mounted) return;
     final pickedTime = await showTimePicker(
       context: context,
-      initialTime: _scheduledDate != null
-          ? TimeOfDay.fromDateTime(_scheduledDate!)
+      initialTime: _scheduledDateTime != null
+          ? TimeOfDay.fromDateTime(_scheduledDateTime!)
           : TimeOfDay.fromDateTime(now),
     );
     if (pickedTime == null) return;
 
     setState(() {
-      _scheduledDate = DateTime(
+      _scheduledDateTime = DateTime(
         pickedDate.year,
         pickedDate.month,
         pickedDate.day,
@@ -116,11 +121,32 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     });
   }
 
-  Duration? get _timeEstimate {
+  Duration? get _estimatedDuration {
     final days = int.tryParse(_estDaysController.text.trim()) ?? 0;
     final hours = int.tryParse(_estHoursController.text.trim()) ?? 0;
     final minutes = int.tryParse(_estMinutesController.text.trim()) ?? 0;
     return DurationParts(days: days, hours: hours, minutes: minutes).toDuration();
+  }
+
+  /// Materializes the picked [_scheduledDateTime] + estimate into concrete
+  /// wall-clock ranges, splitting across breaks the same way drag-and-drop
+  /// does (using the active hours in effect right now) — so
+  /// `estimatedExecutionTimeRanges.first.start` always matches the picked
+  /// start exactly, with any later segments derived automatically.
+  List<TaskTimeRange> _computeRanges() {
+    final scheduled = _scheduledDateTime;
+    final estimate = _estimatedDuration;
+    if (scheduled == null || estimate == null) return const [];
+
+    final activeHours = ref.read(userSettingsStreamProvider).value?.activeHourRanges ?? defaultActiveHourRanges;
+    final startMinutes = scheduled.hour * 60 + scheduled.minute;
+    final segments = realSegmentsForPlacement(
+      startMinutes: startMinutes,
+      durationMinutes: estimate.inMinutes,
+      activeHours: activeHours,
+      constrainedToWorkingHours: _constrainedToWorkingHours,
+    );
+    return taskTimeRangesForDay(scheduled, segments);
   }
 
   void _save() {
@@ -128,32 +154,35 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     if (title.isEmpty) return;
 
     final repo = ref.read(taskRepositoryProvider);
-    final userId = ref.read(currentUserIdProvider);
     final existing = widget.task;
+    final ranges = _computeRanges();
 
     if (existing == null) {
-      repo
-          .addTask(
-            userId: userId,
-            title: title,
-            dueDate: _dueDate,
-            scheduledDate: _scheduledDate,
-            isRecurrent: _isRecurrent,
-            recurrenceRule: _isRecurrent ? _recurrenceRule : null,
-            categoryIds: _categoryIds,
-            linkedGoalId: _linkedGoalId,
-            timeEstimate: _timeEstimate,
-            isImportant: _isImportant,
-            isUrgent: _isUrgent,
-          )
-          .catchError((e) => ref.read(errorReporterProvider).report(e));
+      final draft = Task(
+        id: '',
+        userId: ref.read(currentUserIdProvider),
+        title: title,
+        dueDate: _dueDate,
+        estimatedExecutionTimeRanges: ranges,
+        isRecurrent: _isRecurrent,
+        recurrenceRule: _isRecurrent ? _recurrenceRule : null,
+        categoryIds: _categoryIds,
+        linkedGoalId: _linkedGoalId,
+        isCompleted: false,
+        createdAt: ref.read(clockProvider).now(),
+        estimatedDuration: _estimatedDuration,
+        isImportant: _isImportant,
+        isUrgent: _isUrgent,
+        constrainedToWorkingHours: _constrainedToWorkingHours,
+      );
+      repo.addTask(draft).catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
       final goalChanged = _linkedGoalId != existing.linkedGoalId;
       repo
           .updateTask(existing.copyWith(
             title: title,
             dueDate: _dueDate,
-            scheduledDate: _scheduledDate,
+            estimatedExecutionTimeRanges: ranges,
             isRecurrent: _isRecurrent,
             recurrenceRule: _isRecurrent ? _recurrenceRule : null,
             categoryIds: _categoryIds,
@@ -162,9 +191,10 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
             // linked goal's N-task cap; relinking to a different goal must
             // not silently carry it over (and skip that goal's cap).
             contributesToCount: goalChanged ? false : null,
-            timeEstimate: _timeEstimate,
+            estimatedDuration: _estimatedDuration,
             isImportant: _isImportant,
             isUrgent: _isUrgent,
+            constrainedToWorkingHours: _constrainedToWorkingHours,
           ))
           .catchError((e) => ref.read(errorReporterProvider).report(e));
     }
@@ -209,22 +239,22 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
             Row(
               children: [
                 Expanded(
-                  child: Text(_scheduledDate == null
+                  child: Text(_scheduledDateTime == null
                       ? 'Not scheduled'
-                      : 'Scheduled ${DateFormat.yMMMd().add_Hm().format(_scheduledDate!)}'),
+                      : 'Scheduled ${DateFormat.yMMMd().add_Hm().format(_scheduledDateTime!)}'),
                 ),
                 TextButton(onPressed: _pickScheduledDate, child: const Text('Pick date & time')),
-                if (_scheduledDate != null)
+                if (_scheduledDateTime != null)
                   IconButton(
                     icon: const Icon(Icons.clear),
-                    onPressed: () => setState(() => _scheduledDate = null),
+                    onPressed: () => setState(() => _scheduledDateTime = null),
                   ),
               ],
             ),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Time estimate', style: Theme.of(context).textTheme.labelLarge),
+              child: Text('Estimated duration', style: Theme.of(context).textTheme.labelLarge),
             ),
             const SizedBox(height: 4),
             Row(

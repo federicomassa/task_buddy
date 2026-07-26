@@ -16,7 +16,7 @@ Task _task({
   required String title,
   DateTime? dueDate,
   DateTime? scheduledDate,
-  Duration? timeEstimate,
+  Duration? estimatedDuration,
   bool isRecurrent = false,
   bool isCompleted = false,
   List<String> categoryIds = const [],
@@ -26,13 +26,15 @@ Task _task({
     userId: 'u1',
     title: title,
     dueDate: dueDate,
-    scheduledDate: scheduledDate,
+    estimatedExecutionTimeRanges: scheduledDate != null && estimatedDuration != null
+        ? [TaskTimeRange(start: scheduledDate, end: scheduledDate.add(estimatedDuration))]
+        : const [],
     isRecurrent: isRecurrent,
     recurrenceRule: isRecurrent ? RecurrenceRule.daily : null,
     categoryIds: categoryIds,
     isCompleted: isCompleted,
     createdAt: DateTime(2026, 1, 1),
-    timeEstimate: timeEstimate,
+    estimatedDuration: estimatedDuration,
   );
 }
 
@@ -51,7 +53,7 @@ void main() {
       title: 'A pretty long task title that will wrap onto a second line easily',
       dueDate: DateTime(2026, 7, 20),
       scheduledDate: DateTime(2026, 7, 22, 9, 0),
-      timeEstimate: const Duration(hours: 1, minutes: 30),
+      estimatedDuration: const Duration(hours: 1, minutes: 30),
       isRecurrent: true,
       isCompleted: true,
       categoryIds: ['c1', 'c2', 'c3'],
@@ -79,7 +81,7 @@ void main() {
       title: 'Another long task title for the Tasks tab list item',
       dueDate: DateTime(2026, 7, 20, 14, 30),
       scheduledDate: DateTime(2026, 7, 22, 9, 0),
-      timeEstimate: const Duration(hours: 1, minutes: 30),
+      estimatedDuration: const Duration(hours: 1, minutes: 30),
       isRecurrent: true,
       categoryIds: ['c1', 'c2', 'c3'],
     );

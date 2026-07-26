@@ -134,8 +134,7 @@ final unscheduledTodayTasksProvider = Provider<List<Task>>((ref) {
     if (t.dueDate == null) return false;
     final due = dateOnly(t.dueDate!);
     if (due.isAfter(today)) return false;
-    final sched = t.scheduledDate;
-    final scheduledForToday = sched != null && dateOnly(sched) == today;
+    final scheduledForToday = t.estimatedExecutionTimeRanges.any((r) => dateOnly(r.start) == today);
     return !scheduledForToday;
   }).toList();
 });
@@ -165,8 +164,8 @@ final todayScheduledTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
   final today = ref.watch(todayProvider);
   return tasks.where((t) {
-    if (t.scheduledDate == null) return false;
-    return dateOnly(t.scheduledDate!) == today;
+    if (t.estimatedExecutionTimeRanges.isEmpty) return false;
+    return t.estimatedExecutionTimeRanges.any((r) => dateOnly(r.start) == today);
   }).toList();
 });
 

@@ -7,20 +7,12 @@ import 'goal_repository.dart';
 abstract class TaskRepository {
   Stream<List<Task>> streamTasks(String userId);
 
-  Future<void> addTask({
-    required String userId,
-    required String title,
-    DateTime? dueDate,
-    DateTime? scheduledDate,
-    required bool isRecurrent,
-    RecurrenceRule? recurrenceRule,
-    List<String> categoryIds = const [],
-    String? linkedGoalId,
-    Duration? timeEstimate,
-    bool isImportant = false,
-    bool isUrgent = false,
-    bool constrainedToWorkingHours = true,
-  });
+  /// Creates a new task from [draft]. Only the user-editable fields are
+  /// used — [Task.id], [Task.createdAt], [Task.isCompleted],
+  /// [Task.completedAt], and [Task.contributesToCount] are ignored in favor
+  /// of the new task's own defaults, so callers can pass a placeholder
+  /// (e.g. `id: ''`) for those.
+  Future<void> addTask(Task draft);
 
   Future<void> updateTask(Task task);
 
@@ -35,7 +27,7 @@ abstract class TaskRepository {
   /// adjusted immediately to match.
   Future<void> setContributesToCount(Task task, bool contributesToCount);
 
-  Future<void> scheduleTask(Task task, DateTime scheduledDate);
+  Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges);
 
   Future<void> unscheduleTask(Task task);
 }
@@ -60,38 +52,13 @@ class FirestoreTaskRepository implements TaskRepository {
   }
 
   @override
-  Future<void> addTask({
-    required String userId,
-    required String title,
-    DateTime? dueDate,
-    DateTime? scheduledDate,
-    required bool isRecurrent,
-    RecurrenceRule? recurrenceRule,
-    List<String> categoryIds = const [],
-    String? linkedGoalId,
-    Duration? timeEstimate,
-    bool isImportant = false,
-    bool isUrgent = false,
-    bool constrainedToWorkingHours = true,
-  }) {
-    return _collection.add({
-      'userId': userId,
-      'title': title,
-      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
-      'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate) : null,
-      'isRecurrent': isRecurrent,
-      'recurrenceRule': recurrenceRule?.name,
-      'categoryIds': categoryIds,
-      'linkedGoalId': linkedGoalId,
-      'contributesToCount': false,
-      'isCompleted': false,
-      'completedAt': null,
-      'createdAt': Timestamp.now(),
-      'timeEstimateMinutes': timeEstimate?.inMinutes,
-      'isImportant': isImportant,
-      'isUrgent': isUrgent,
-      'constrainedToWorkingHours': constrainedToWorkingHours,
-    });
+  Future<void> addTask(Task draft) {
+    final data = draft.toFirestore();
+    data['contributesToCount'] = false;
+    data['isCompleted'] = false;
+    data['completedAt'] = null;
+    data['createdAt'] = Timestamp.now();
+    return _collection.add(data);
   }
 
   @override
@@ -99,13 +66,13 @@ class FirestoreTaskRepository implements TaskRepository {
     return _collection.doc(task.id).update({
       'title': task.title,
       'dueDate': task.dueDate != null ? Timestamp.fromDate(task.dueDate!) : null,
-      'scheduledDate': task.scheduledDate != null ? Timestamp.fromDate(task.scheduledDate!) : null,
+      'estimatedExecutionTimeRanges': task.estimatedExecutionTimeRanges.map((r) => r.toFirestore()).toList(),
       'isRecurrent': task.isRecurrent,
       'recurrenceRule': task.recurrenceRule?.name,
       'categoryIds': task.categoryIds,
       'linkedGoalId': task.linkedGoalId,
       'contributesToCount': task.contributesToCount,
-      'timeEstimateMinutes': task.timeEstimate?.inMinutes,
+      'estimatedDurationMinutes': task.estimatedDuration?.inMinutes,
       'isImportant': task.isImportant,
       'isUrgent': task.isUrgent,
       'constrainedToWorkingHours': task.constrainedToWorkingHours,
@@ -152,12 +119,12 @@ class FirestoreTaskRepository implements TaskRepository {
   }
 
   @override
-  Future<void> scheduleTask(Task task, DateTime scheduledDate) {
-    return updateTask(task.copyWith(scheduledDate: scheduledDate));
+  Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges) {
+    return updateTask(task.copyWith(estimatedExecutionTimeRanges: ranges));
   }
 
   @override
   Future<void> unscheduleTask(Task task) {
-    return updateTask(task.copyWith(scheduledDate: null));
+    return updateTask(task.copyWith(estimatedExecutionTimeRanges: []));
   }
 }

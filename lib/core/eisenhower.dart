@@ -27,7 +27,7 @@ int priorityWeight(EisenhowerQuadrant quadrant, WsjfWeights weights) {
 /// minutes, so higher-priority and shorter tasks score higher. Null if the
 /// task has no time estimate yet, since the score is undefined until then.
 double? wsjfScore(Task task, WsjfWeights weights) {
-  final estimate = task.timeEstimate;
+  final estimate = task.estimatedDuration;
   if (estimate == null || estimate.inMinutes <= 0) return null;
   return priorityWeight(quadrantOf(task), weights) / estimate.inMinutes;
 }

@@ -7,7 +7,7 @@ void main() {
   final today = DateTime(2026, 7, 22);
   const weights = WsjfWeights(importantUrgent: 10, urgentOnly: 5, importantOnly: 3, neither: 1);
 
-  Task buildTask({bool isImportant = false, bool isUrgent = false, Duration? timeEstimate}) {
+  Task buildTask({bool isImportant = false, bool isUrgent = false, Duration? estimatedDuration}) {
     return Task(
       id: 't1',
       userId: 'u1',
@@ -16,7 +16,7 @@ void main() {
       categoryIds: const [],
       isCompleted: false,
       createdAt: today,
-      timeEstimate: timeEstimate,
+      estimatedDuration: estimatedDuration,
       isImportant: isImportant,
       isUrgent: isUrgent,
     );
@@ -55,13 +55,13 @@ void main() {
     });
 
     test('weight divided by duration in minutes', () {
-      final task = buildTask(isImportant: true, isUrgent: true, timeEstimate: const Duration(minutes: 20));
+      final task = buildTask(isImportant: true, isUrgent: true, estimatedDuration: const Duration(minutes: 20));
       expect(wsjfScore(task, weights), 0.5);
     });
 
     test('lower priority quadrant scores lower for the same duration', () {
-      final p0 = buildTask(isImportant: true, isUrgent: true, timeEstimate: const Duration(minutes: 30));
-      final p3 = buildTask(timeEstimate: const Duration(minutes: 30));
+      final p0 = buildTask(isImportant: true, isUrgent: true, estimatedDuration: const Duration(minutes: 30));
+      final p3 = buildTask(estimatedDuration: const Duration(minutes: 30));
       expect(wsjfScore(p0, weights)! > wsjfScore(p3, weights)!, isTrue);
     });
   });

@@ -43,10 +43,10 @@ class TaskTile extends StatelessWidget {
         children: [
           if (task.dueDate != null)
             Text(DateFormat.yMMMd().add_Hm().format(task.dueDate!)),
-          if (task.scheduledDate != null)
-            Text('Scheduled ${DateFormat.yMMMd().add_Hm().format(task.scheduledDate!)}'),
-          if (task.timeEstimate != null)
-            Text('~${formatEstimate(task.timeEstimate!)}'),
+          if (task.estimatedExecutionTimeRanges.isNotEmpty)
+            Text('Scheduled ${DateFormat.yMMMd().add_Hm().format(task.estimatedExecutionTimeRanges.first.start)}'),
+          if (task.estimatedDuration != null)
+            Text('~${formatEstimate(task.estimatedDuration!)}'),
           if (task.isRecurrent)
             Icon(Icons.repeat, size: 16, color: Theme.of(context).colorScheme.primary),
           for (final c in linkedCategories) CategoryChip(category: c),

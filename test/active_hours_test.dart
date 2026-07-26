@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_buddy/core/active_hours.dart';
-import 'package:task_buddy/models/task.dart';
 import 'package:task_buddy/models/user_settings.dart';
 
 void main() {
@@ -82,64 +81,52 @@ void main() {
     });
   });
 
-  group('taskRealSegments', () {
-    final today = DateTime(2026, 7, 22);
-
-    Task buildTask({
-      DateTime? scheduledDate,
-      Duration? timeEstimate,
-      bool constrainedToWorkingHours = true,
-    }) {
-      return Task(
-        id: 't1',
-        userId: 'u1',
-        title: 'Test task',
-        isRecurrent: false,
-        categoryIds: const [],
-        isCompleted: false,
-        createdAt: today,
-        scheduledDate: scheduledDate,
-        timeEstimate: timeEstimate,
-        constrainedToWorkingHours: constrainedToWorkingHours,
-      );
-    }
-
-    test('empty when not scheduled or no estimate', () {
-      expect(taskRealSegments(buildTask(), ranges), isEmpty);
+  group('realSegmentsForPlacement', () {
+    test('empty duration produces a zero-length literal when unconstrained', () {
       expect(
-        taskRealSegments(buildTask(scheduledDate: DateTime(2026, 7, 22, 9)), ranges),
-        isEmpty,
+        realSegmentsForPlacement(
+          startMinutes: 9 * 60,
+          durationMinutes: 0,
+          activeHours: ranges,
+          constrainedToWorkingHours: false,
+        ),
+        [const TimeRange(startMinutes: 9 * 60, endMinutes: 9 * 60)],
       );
     });
 
-    test('a task starting before lunch and running 2h splits across it', () {
-      final task = buildTask(
-        scheduledDate: DateTime(2026, 7, 22, 11, 30),
-        timeEstimate: const Duration(hours: 2),
+    test('a placement starting before lunch and running 2h splits across it', () {
+      final segments = realSegmentsForPlacement(
+        startMinutes: 11 * 60 + 30,
+        durationMinutes: 120,
+        activeHours: ranges,
+        constrainedToWorkingHours: true,
       );
-      expect(taskRealSegments(task, ranges), [
+      expect(segments, [
         const TimeRange(startMinutes: 11 * 60 + 30, endMinutes: 12 * 60),
         const TimeRange(startMinutes: 13 * 60, endMinutes: 14 * 60 + 30),
       ]);
     });
 
-    test('a task scheduled outside any active-hours range renders unsplit', () {
-      final task = buildTask(
-        scheduledDate: DateTime(2026, 7, 22, 20, 0),
-        timeEstimate: const Duration(hours: 1),
+    test('a placement outside any active-hours range renders unsplit', () {
+      final segments = realSegmentsForPlacement(
+        startMinutes: 20 * 60,
+        durationMinutes: 60,
+        activeHours: ranges,
+        constrainedToWorkingHours: true,
       );
-      expect(taskRealSegments(task, ranges), [
+      expect(segments, [
         const TimeRange(startMinutes: 20 * 60, endMinutes: 21 * 60),
       ]);
     });
 
-    test('a task with constrainedToWorkingHours false always renders as one literal block', () {
-      final task = buildTask(
-        scheduledDate: DateTime(2026, 7, 22, 11, 30),
-        timeEstimate: const Duration(hours: 2),
+    test('constrainedToWorkingHours false always renders as one literal block', () {
+      final segments = realSegmentsForPlacement(
+        startMinutes: 11 * 60 + 30,
+        durationMinutes: 120,
+        activeHours: ranges,
         constrainedToWorkingHours: false,
       );
-      expect(taskRealSegments(task, ranges), [
+      expect(segments, [
         const TimeRange(startMinutes: 11 * 60 + 30, endMinutes: 13 * 60 + 30),
       ]);
     });

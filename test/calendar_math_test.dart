@@ -29,4 +29,24 @@ void main() {
       24 * 60 - 15,
     );
   });
+
+  group('tinyBlockEnvelope', () {
+    test('no overflow when the bar is already taller than the label', () {
+      final envelope = tinyBlockEnvelope(barHeight: 40, labelAllocation: 32);
+      expect(envelope.envelopeHeight, 40);
+      expect(envelope.topOffset, 0);
+    });
+
+    test('no overflow when the bar exactly matches the label allocation', () {
+      final envelope = tinyBlockEnvelope(barHeight: 32, labelAllocation: 32);
+      expect(envelope.envelopeHeight, 32);
+      expect(envelope.topOffset, 0);
+    });
+
+    test('grows symmetrically around the bar when the label is taller', () {
+      final envelope = tinyBlockEnvelope(barHeight: 2, labelAllocation: 32);
+      expect(envelope.topOffset, 15);
+      expect(envelope.envelopeHeight, 32);
+    });
+  });
 }

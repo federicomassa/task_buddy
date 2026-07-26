@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/active_hours.dart';
 import '../../core/plan_scheduler.dart';
 import '../../models/task.dart';
 import '../../models/user_settings.dart';
@@ -22,7 +23,7 @@ Future<void> runScheduleMyDay(
   required UserSettings settings,
   required DateTime today,
 }) async {
-  final estimatedTasks = tasks.where((t) => t.timeEstimate != null).toList();
+  final estimatedTasks = tasks.where((t) => t.estimatedDuration != null).toList();
   final repo = ref.read(taskRepositoryProvider);
   final messenger = ScaffoldMessenger.of(context);
 
@@ -44,7 +45,7 @@ Future<void> runScheduleMyDay(
     builder: (dialogContext) => AlertDialog(
       title: const Text('Shorter than your active hours'),
       content: const Text(
-        'The total time estimate for your tasks is shorter than your active hours. '
+        'The total estimated duration for your tasks is shorter than your active hours. '
         'Do you want to...',
       ),
       actions: [
@@ -72,20 +73,18 @@ Future<void> runScheduleMyDay(
     case _CapacityChoice.insertFreeTime:
       await Future.wait([
         for (final gap in result.remainingGaps)
-          repo.addTask(
+          repo.addTask(Task(
+            id: '',
             userId: ref.read(currentUserIdProvider),
             title: 'Free time',
             dueDate: today,
-            scheduledDate: DateTime(
-              today.year,
-              today.month,
-              today.day,
-              gap.startMinutes ~/ 60,
-              gap.startMinutes % 60,
-            ),
+            estimatedExecutionTimeRanges: taskTimeRangesForDay(today, [gap]),
             isRecurrent: false,
-            timeEstimate: Duration(minutes: gap.endMinutes - gap.startMinutes),
-          ),
+            categoryIds: const [],
+            isCompleted: false,
+            createdAt: ref.read(clockProvider).now(),
+            estimatedDuration: Duration(minutes: gap.endMinutes - gap.startMinutes),
+          )),
       ]);
       await _applyPlan(repo, estimatedTasks, result);
       _showSummary(messenger, result, addedFreeTimeSlots: result.remainingGaps.length);
@@ -96,18 +95,18 @@ Future<void> runScheduleMyDay(
   }
 }
 
-/// Writes every task's new scheduledDate concurrently (rather than one
-/// `await` at a time) so they leave the matrix's quadrants together instead
-/// of visibly draining out one by one.
+/// Writes every task's new estimatedExecutionTimeRanges concurrently (rather
+/// than one `await` at a time) so they leave the matrix's quadrants together
+/// instead of visibly draining out one by one.
 Future<void> _applyPlan(TaskRepository repo, List<Task> tasks, PlanResult result) async {
   await Future.wait([
     for (final task in tasks)
-      if (result.scheduledTimes[task.id] case final scheduledDate?) repo.scheduleTask(task, scheduledDate),
+      if (result.scheduledRanges[task.id] case final ranges?) repo.scheduleTaskRanges(task, ranges),
   ]);
 }
 
 void _showSummary(ScaffoldMessengerState messenger, PlanResult result, {int addedFreeTimeSlots = 0}) {
-  final scheduledCount = result.scheduledTimes.length;
+  final scheduledCount = result.scheduledRanges.length;
   final parts = <String>['Scheduled $scheduledCount task${scheduledCount == 1 ? '' : 's'}'];
   if (addedFreeTimeSlots > 0) {
     parts.add('added $addedFreeTimeSlots free time slot${addedFreeTimeSlots == 1 ? '' : 's'}');

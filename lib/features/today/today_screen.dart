@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/app_providers.dart';
 import '../../widgets/settings_button.dart';
-import '../../widgets/sign_out_button.dart';
 import '../plan/help_me_plan_screen.dart';
 import 'calendar_pane.dart';
 import 'unscheduled_list_pane.dart';
@@ -17,11 +16,25 @@ class TodayScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final today = ref.watch(todayProvider);
     final isWide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
+    final allowOverlap = ref.watch(allowOverlapProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Today'),
         actions: [
+          Tooltip(
+            message: 'Allow overlapping tasks',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Allow overlap'),
+                Switch(
+                  value: allowOverlap,
+                  onChanged: (value) => ref.read(allowOverlapProvider.notifier).set(value),
+                ),
+              ],
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.auto_awesome),
             tooltip: 'Help me plan',
@@ -30,7 +43,6 @@ class TodayScreen extends ConsumerWidget {
             ),
           ),
           const SettingsButton(),
-          const SignOutButton(),
         ],
       ),
       body: isWide

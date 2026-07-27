@@ -118,5 +118,118 @@ void main() {
 
       expect(result.remainingGaps, isEmpty);
     });
+
+    test('picks the higher-combined-value pair of deadline-bound tasks over '
+        'a single long unconstrained one that would crowd them out', () {
+      // Capacity: 9:00-10:40 = 100 min.
+      final a = buildTask('a', isImportant: true, isUrgent: true, minutes: 100); // score 10/100 = 0.1
+      final b = Task(
+        id: 'b',
+        userId: 'u1',
+        title: 'b',
+        isRecurrent: false,
+        categoryIds: const [],
+        isCompleted: false,
+        createdAt: today,
+        estimatedDuration: const Duration(minutes: 40),
+        isImportant: true,
+        isUrgent: true, // score 10/40 = 0.25
+        dueDate: DateTime(2026, 7, 22, 9, 40), // virtual deadline 40 -> must run first
+      );
+      final c = buildTask('c', isImportant: true, minutes: 40); // score 3/40 = 0.075
+
+      final result = computePlan(
+        tasks: [a, b, c],
+        activeHours: const [TimeRange(startMinutes: 9 * 60, endMinutes: 10 * 60 + 40)],
+        weights: weights,
+        today: today,
+      );
+
+      expect(result.scheduledRanges.containsKey('b'), isTrue);
+      expect(result.scheduledRanges.containsKey('c'), isTrue);
+      expect(result.scheduledRanges.containsKey('a'), isFalse);
+      expect(result.unscheduled, [a]);
+      expect(result.infeasibleTasks, isEmpty);
+    });
+
+    test('a task due earlier than its own duration allows is reported as '
+        'infeasible, not unscheduled', () {
+      final task = Task(
+        id: 'tight',
+        userId: 'u1',
+        title: 'Finish report',
+        isRecurrent: false,
+        categoryIds: const [],
+        isCompleted: false,
+        createdAt: today,
+        estimatedDuration: const Duration(minutes: 60),
+        dueDate: DateTime(2026, 7, 22, 9, 15),
+      );
+
+      final result = computePlan(
+        tasks: [task],
+        activeHours: const [TimeRange(startMinutes: 9 * 60, endMinutes: 17 * 60)],
+        weights: weights,
+        today: today,
+      );
+
+      expect(result.infeasibleTasks, hasLength(1));
+      expect(result.infeasibleTasks.single.task.id, 'tight');
+      expect(result.infeasibleTasks.single.reason, contains('Finish report'));
+      expect(result.infeasibleTasks.single.reason, contains('9:15 AM'));
+      expect(result.infeasibleTasks.single.reason, contains('1h'));
+      expect(result.unscheduled, isEmpty);
+      expect(result.scheduledRanges, isEmpty);
+    });
+
+    test('urgent tasks are guaranteed a slot over any amount of optional '
+        "packing, as long as they'd fit", () {
+      // 8h of capacity. Two urgent tasks (5h25m + 2h30m = 475min) leave only
+      // 5 spare minutes, yet score far lower per-minute than the tiny
+      // optional tasks below -- plain WSJF-value knapsacking would drop one
+      // or both long urgent tasks in favor of packing many small ones.
+      final bigUrgent1 = buildTask('big1', isImportant: true, isUrgent: true, minutes: 5 * 60 + 25);
+      final bigUrgent2 = buildTask('big2', isImportant: true, isUrgent: true, minutes: 2 * 60 + 30);
+      final tinyOptional = [
+        for (var i = 0; i < 8; i++) buildTask('tiny$i', minutes: 15), // P3 each, high score/minute
+      ];
+
+      final result = computePlan(
+        tasks: [...tinyOptional, bigUrgent1, bigUrgent2],
+        activeHours: const [TimeRange(startMinutes: 9 * 60, endMinutes: 17 * 60)], // 480 min
+        weights: weights,
+        today: today,
+      );
+
+      expect(result.scheduledRanges.containsKey('big1'), isTrue);
+      expect(result.scheduledRanges.containsKey('big2'), isTrue);
+    });
+
+    test('an overdue task keeps its old due time from acting as a same-day '
+        'deadline', () {
+      final task = Task(
+        id: 'overdue',
+        userId: 'u1',
+        title: 'overdue',
+        isRecurrent: false,
+        categoryIds: const [],
+        isCompleted: false,
+        createdAt: today,
+        estimatedDuration: const Duration(minutes: 60),
+        dueDate: DateTime(2026, 7, 21, 8, 0), // yesterday, 08:00 -- before the day even starts
+      );
+
+      final result = computePlan(
+        tasks: [task],
+        activeHours: const [TimeRange(startMinutes: 9 * 60, endMinutes: 12 * 60)],
+        weights: weights,
+        today: today,
+      );
+
+      expect(result.infeasibleTasks, isEmpty);
+      expect(result.scheduledRanges['overdue'], [
+        TaskTimeRange(start: DateTime(2026, 7, 22, 9, 0), end: DateTime(2026, 7, 22, 10, 0)),
+      ]);
+    });
   });
 }

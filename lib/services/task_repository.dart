@@ -27,7 +27,7 @@ abstract class TaskRepository {
   /// adjusted immediately to match.
   Future<void> setContributesToCount(Task task, bool contributesToCount);
 
-  Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges);
+  Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges, {bool? constrainedToWorkingHours});
 
   Future<void> unscheduleTask(Task task);
 }
@@ -119,12 +119,15 @@ class FirestoreTaskRepository implements TaskRepository {
   }
 
   @override
-  Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges) {
-    return updateTask(task.copyWith(estimatedExecutionTimeRanges: ranges));
+  Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges, {bool? constrainedToWorkingHours}) {
+    return updateTask(task.copyWith(
+      estimatedExecutionTimeRanges: ranges,
+      constrainedToWorkingHours: constrainedToWorkingHours,
+    ));
   }
 
   @override
   Future<void> unscheduleTask(Task task) {
-    return updateTask(task.copyWith(estimatedExecutionTimeRanges: []));
+    return updateTask(task.copyWith(estimatedExecutionTimeRanges: const <TaskTimeRange>[]));
   }
 }

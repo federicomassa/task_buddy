@@ -310,6 +310,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   () => ref.read(notificationServiceProvider).scheduleTestNotificationInOneMinute(),
                 ),
               ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Sign out'),
+                onTap: () => ref.read(authServiceProvider).signOut(),
+              ),
             ],
           );
         },

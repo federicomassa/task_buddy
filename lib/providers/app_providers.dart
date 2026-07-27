@@ -9,6 +9,7 @@ import '../core/clock.dart';
 import '../core/date_utils.dart';
 import '../core/error_reporter.dart';
 import '../core/filter_state.dart';
+import '../core/today_task_filters.dart';
 import '../models/task.dart';
 import '../services/auth_service.dart';
 import '../services/category_repository.dart';
@@ -57,13 +58,19 @@ final goalRepositoryProvider = Provider<GoalRepository>((ref) {
   return FirestoreGoalRepository(ref.watch(firestoreProvider), ref.watch(clockProvider));
 });
 
-final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+/// The real, Firestore-backed task repository. Kept separate from
+/// [taskRepositoryProvider] so the plan-preview screen can override just the
+/// latter (to sandbox schedule writes in memory) while still reaching this
+/// one directly to flush the preview to Firestore on confirm.
+final realTaskRepositoryProvider = Provider<TaskRepository>((ref) {
   return FirestoreTaskRepository(
     ref.watch(firestoreProvider),
     ref.watch(clockProvider),
     ref.watch(goalRepositoryProvider),
   );
 });
+
+final taskRepositoryProvider = Provider<TaskRepository>((ref) => ref.watch(realTaskRepositoryProvider));
 
 final habitCycleServiceProvider = Provider<HabitCycleService>((ref) {
   return HabitCycleService(
@@ -128,15 +135,7 @@ final todayProvider = Provider<DateTime>((ref) => dateOnly(ref.watch(clockProvid
 /// excluded since this list is for planning the day.
 final unscheduledTodayTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
-  final today = ref.watch(todayProvider);
-  return tasks.where((t) {
-    if (t.isCompleted) return false;
-    if (t.dueDate == null) return false;
-    final due = dateOnly(t.dueDate!);
-    if (due.isAfter(today)) return false;
-    final scheduledForToday = t.estimatedExecutionTimeRanges.any((r) => dateOnly(r.start) == today);
-    return !scheduledForToday;
-  }).toList();
+  return unscheduledTasksForToday(tasks, ref.watch(todayProvider));
 });
 
 /// Active tasks due today or earlier, regardless of whether they're already
@@ -162,11 +161,7 @@ final planEligibleTasksProvider = Provider<List<Task>>((ref) {
 /// of disappearing.
 final todayScheduledTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
-  final today = ref.watch(todayProvider);
-  return tasks.where((t) {
-    if (t.estimatedExecutionTimeRanges.isEmpty) return false;
-    return t.estimatedExecutionTimeRanges.any((r) => dateOnly(r.start) == today);
-  }).toList();
+  return scheduledTasksForToday(tasks, ref.watch(todayProvider));
 });
 
 /// Live position of a task card being dragged toward the calendar (from
@@ -192,6 +187,21 @@ class DragPreviewNotifier extends Notifier<DragPreview?> {
 
 final dragPreviewProvider = NotifierProvider<DragPreviewNotifier, DragPreview?>(
   DragPreviewNotifier.new,
+);
+
+/// Whether dropping a task onto the calendar is allowed to overlap another
+/// scheduled task. Defaults to `false` (pure reordering: drops cascade-shift
+/// colliding tasks out of the way — see [resolveOverlapFreeDrop]). In-memory
+/// only, resets to the default on cold start.
+class AllowOverlapNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
+}
+
+final allowOverlapProvider = NotifierProvider<AllowOverlapNotifier, bool>(
+  AllowOverlapNotifier.new,
 );
 
 /// Filter selections for the Tasks tab. In-memory only (resets on cold

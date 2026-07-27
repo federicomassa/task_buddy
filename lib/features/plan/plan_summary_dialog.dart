@@ -6,16 +6,17 @@ import '../../core/plan_scheduler.dart';
 import '../../models/task.dart';
 import '../../models/user_settings.dart';
 import '../../providers/app_providers.dart';
-import '../../services/task_repository.dart';
+import 'plan_preview_screen.dart';
+import 'plan_preview_state.dart';
 
 enum _CapacityChoice { proceed, insertFreeTime, goBack }
 
+enum _InfeasibleChoice { goBack, scheduleRest }
+
 /// Entry point for the "Schedule my day" button: computes the WSJF plan, and
 /// if the estimated tasks don't fill the user's active hours, asks how to
-/// handle the shortfall before applying anything. Stays on the matrix screen
-/// throughout — scheduled tasks naturally leave their quadrant (they're no
-/// longer "unscheduled"), but a snackbar summarizes the result instead of
-/// navigating the user away.
+/// handle the shortfall — then pushes a [PlanPreviewScreen] so the user can
+/// see and adjust the proposal before anything is written to Firestore.
 Future<void> runScheduleMyDay(
   BuildContext context,
   WidgetRef ref, {
@@ -24,8 +25,6 @@ Future<void> runScheduleMyDay(
   required DateTime today,
 }) async {
   final estimatedTasks = tasks.where((t) => t.estimatedDuration != null).toList();
-  final repo = ref.read(taskRepositoryProvider);
-  final messenger = ScaffoldMessenger.of(context);
 
   final result = computePlan(
     tasks: estimatedTasks,
@@ -34,9 +33,32 @@ Future<void> runScheduleMyDay(
     today: today,
   );
 
+  if (result.infeasibleTasks.isNotEmpty) {
+    final infeasibleChoice = await showDialog<_InfeasibleChoice>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Some tasks can't be scheduled today"),
+        content: SingleChildScrollView(
+          child: Text(result.infeasibleTasks.map((it) => it.reason).join('\n\n')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_InfeasibleChoice.goBack),
+            child: const Text('Go back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_InfeasibleChoice.scheduleRest),
+            child: const Text('Schedule the rest'),
+          ),
+        ],
+      ),
+    );
+    if (infeasibleChoice != _InfeasibleChoice.scheduleRest) return;
+    if (!context.mounted) return;
+  }
+
   if (result.totalEstimateMinutes >= result.totalActiveMinutes) {
-    await _applyPlan(repo, estimatedTasks, result);
-    _showSummary(messenger, result);
+    _pushPreview(context, result: result, planTasks: estimatedTasks, freeTimeDrafts: const []);
     return;
   }
 
@@ -64,30 +86,20 @@ Future<void> runScheduleMyDay(
       ],
     ),
   );
+  if (!context.mounted) return;
 
   switch (choice) {
     case _CapacityChoice.proceed:
-      await _applyPlan(repo, estimatedTasks, result);
-      _showSummary(messenger, result);
+      _pushPreview(context, result: result, planTasks: estimatedTasks, freeTimeDrafts: const []);
       break;
     case _CapacityChoice.insertFreeTime:
-      await Future.wait([
-        for (final gap in result.remainingGaps)
-          repo.addTask(Task(
-            id: '',
-            userId: ref.read(currentUserIdProvider),
-            title: 'Free time',
-            dueDate: today,
-            estimatedExecutionTimeRanges: taskTimeRangesForDay(today, [gap]),
-            isRecurrent: false,
-            categoryIds: const [],
-            isCompleted: false,
-            createdAt: ref.read(clockProvider).now(),
-            estimatedDuration: Duration(minutes: gap.endMinutes - gap.startMinutes),
-          )),
-      ]);
-      await _applyPlan(repo, estimatedTasks, result);
-      _showSummary(messenger, result, addedFreeTimeSlots: result.remainingGaps.length);
+      final drafts = _freeTimeDrafts(
+        result.remainingGaps,
+        today: today,
+        userId: ref.read(currentUserIdProvider),
+        now: ref.read(clockProvider).now(),
+      );
+      _pushPreview(context, result: result, planTasks: estimatedTasks, freeTimeDrafts: drafts);
       break;
     case _CapacityChoice.goBack:
     case null:
@@ -95,24 +107,39 @@ Future<void> runScheduleMyDay(
   }
 }
 
-/// Writes every task's new estimatedExecutionTimeRanges concurrently (rather
-/// than one `await` at a time) so they leave the matrix's quadrants together
-/// instead of visibly draining out one by one.
-Future<void> _applyPlan(TaskRepository repo, List<Task> tasks, PlanResult result) async {
-  await Future.wait([
-    for (final task in tasks)
-      if (result.scheduledRanges[task.id] case final ranges?) repo.scheduleTaskRanges(task, ranges),
-  ]);
+/// Builds not-yet-persisted free-time placeholder drafts for each of
+/// [gaps], one per remaining gap in the active hours — these only become
+/// real Firestore tasks if the plan preview is confirmed.
+List<Task> _freeTimeDrafts(
+  List<TimeRange> gaps, {
+  required DateTime today,
+  required String userId,
+  required DateTime now,
+}) {
+  return [
+    for (var i = 0; i < gaps.length; i++)
+      Task(
+        id: syntheticFreeTimeId(i),
+        userId: userId,
+        title: 'Free time',
+        dueDate: today,
+        estimatedExecutionTimeRanges: taskTimeRangesForDay(today, [gaps[i]]),
+        isRecurrent: false,
+        categoryIds: const [],
+        isCompleted: false,
+        createdAt: now,
+        estimatedDuration: Duration(minutes: gaps[i].endMinutes - gaps[i].startMinutes),
+      ),
+  ];
 }
 
-void _showSummary(ScaffoldMessengerState messenger, PlanResult result, {int addedFreeTimeSlots = 0}) {
-  final scheduledCount = result.scheduledRanges.length;
-  final parts = <String>['Scheduled $scheduledCount task${scheduledCount == 1 ? '' : 's'}'];
-  if (addedFreeTimeSlots > 0) {
-    parts.add('added $addedFreeTimeSlots free time slot${addedFreeTimeSlots == 1 ? '' : 's'}');
-  }
-  if (result.unscheduled.isNotEmpty) {
-    parts.add("${result.unscheduled.length} didn't fit in your active hours");
-  }
-  messenger.showSnackBar(SnackBar(content: Text('${parts.join(', ')}.')));
+void _pushPreview(
+  BuildContext context, {
+  required PlanResult result,
+  required List<Task> planTasks,
+  required List<Task> freeTimeDrafts,
+}) {
+  Navigator.of(context).push(MaterialPageRoute(
+    builder: (_) => PlanPreviewScreen(result: result, planTasks: planTasks, freeTimeDrafts: freeTimeDrafts),
+  ));
 }

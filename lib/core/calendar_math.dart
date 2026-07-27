@@ -13,6 +13,29 @@ int snappedMinutesForLocalY(
   return snapped.clamp(0, 24 * 60 - 15);
 }
 
+/// How close (in minutes) a grid-snapped drop position must be to another
+/// task's end time to magnetically snap to it instead — so a dragged task's
+/// start lines up flush with the end of an adjacent task rather than landing
+/// a grid tick or two off.
+const int neighborSnapThresholdMinutes = 20;
+
+/// Snaps [minutes] to the closest value in [neighborEndMinutes] that lies
+/// within [neighborSnapThresholdMinutes] of it, if any — otherwise returns
+/// [minutes] unchanged. On a distance tie, the earliest-listed neighbor end
+/// wins.
+int snapToNeighborEnd(int minutes, List<int> neighborEndMinutes) {
+  int? closest;
+  var closestDistance = neighborSnapThresholdMinutes + 1;
+  for (final end in neighborEndMinutes) {
+    final distance = (end - minutes).abs();
+    if (distance <= neighborSnapThresholdMinutes && distance < closestDistance) {
+      closest = end;
+      closestDistance = distance;
+    }
+  }
+  return closest ?? minutes;
+}
+
 /// Below this real duration, a scheduled block is too short to hold text
 /// inside its own bar, and instead gets a floating label chip (see
 /// [tinyBlockEnvelope]).

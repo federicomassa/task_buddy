@@ -167,6 +167,32 @@ void main() {
     });
   });
 
+  group('virtualDeadlineFromReal', () {
+    test('deadline inside the first range', () {
+      expect(virtualDeadlineFromReal(10 * 60, ranges), 60);
+    });
+
+    test('deadline inside the break snaps down to the end of the preceding range', () {
+      expect(virtualDeadlineFromReal(12 * 60 + 30, ranges), 180);
+    });
+
+    test('deadline before the work day starts is 0', () {
+      expect(virtualDeadlineFromReal(7 * 60, ranges), 0);
+    });
+
+    test('deadline at the end of the day is full capacity', () {
+      expect(virtualDeadlineFromReal(18 * 60, ranges), 480);
+    });
+
+    test('deadline after the end of the day is full capacity', () {
+      expect(virtualDeadlineFromReal(19 * 60, ranges), 480);
+    });
+
+    test('deadline exactly at a range start boundary', () {
+      expect(virtualDeadlineFromReal(13 * 60, ranges), 180);
+    });
+  });
+
   group('resolveActiveStart', () {
     test('a start already inside a range is returned unchanged', () {
       expect(resolveActiveStart(10 * 60, ranges), 10 * 60);

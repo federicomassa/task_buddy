@@ -31,6 +31,38 @@ void main() {
     );
   });
 
+  group('snapToNeighborEnd', () {
+    test('snaps to a neighbor end within the threshold', () {
+      expect(snapToNeighborEnd(9 * 60 + 5, [9 * 60]), 9 * 60);
+    });
+
+    test('leaves minutes unchanged when no neighbor end is close enough', () {
+      expect(snapToNeighborEnd(9 * 60 + 30, [9 * 60]), 9 * 60 + 30);
+    });
+
+    test('exactly at the threshold still snaps', () {
+      expect(
+        snapToNeighborEnd(9 * 60 + neighborSnapThresholdMinutes, [9 * 60]),
+        9 * 60,
+      );
+    });
+
+    test('just past the threshold does not snap', () {
+      expect(
+        snapToNeighborEnd(9 * 60 + neighborSnapThresholdMinutes + 1, [9 * 60]),
+        9 * 60 + neighborSnapThresholdMinutes + 1,
+      );
+    });
+
+    test('picks the closest neighbor end among several candidates', () {
+      expect(snapToNeighborEnd(10 * 60, [9 * 60 + 50, 10 * 60 + 5]), 10 * 60 + 5);
+    });
+
+    test('on a distance tie, the earliest-listed neighbor wins', () {
+      expect(snapToNeighborEnd(10 * 60, [9 * 60 + 55, 10 * 60 + 5]), 9 * 60 + 55);
+    });
+  });
+
   group('tinyBlockEnvelope', () {
     test('no overflow when the bar is already taller than the label', () {
       final envelope = tinyBlockEnvelope(barHeight: 40, labelAllocation: 32);

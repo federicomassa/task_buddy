@@ -9,7 +9,6 @@ import '../../models/task.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/settings_button.dart';
-import '../../widgets/sign_out_button.dart';
 import '../../widgets/task_tile.dart';
 import 'task_form.dart';
 
@@ -96,7 +95,6 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             onPressed: () => showTaskFilterSheet(context, ref),
           ),
           const SettingsButton(),
-          const SignOutButton(),
         ],
       ),
       floatingActionButton: FloatingActionButton(

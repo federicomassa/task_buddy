@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/active_hours.dart';
 import '../../core/calendar_math.dart';
+import '../../core/date_utils.dart';
+import '../../core/drag_reorder.dart';
 import '../../core/drop_resolution.dart';
 import '../../core/task_card_style.dart';
 import '../../models/task.dart';
@@ -164,16 +166,28 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
   final _stackKey = GlobalKey();
 
   /// Minutes from midnight, snapped to the nearest 15-minute increment, for
-  /// a global drag offset. Null if the calendar isn't laid out yet.
-  int? _snappedMinutesForOffset(Offset globalOffset) {
+  /// a global drag offset — then magnetically re-snapped to the end time of
+  /// another task scheduled today (excluding [excludeTaskId], the task being
+  /// dragged) if one is close by, so the drop lines its start up flush with
+  /// that task's end (see [snapToNeighborEnd]). Null if the calendar isn't
+  /// laid out yet.
+  int? _snappedMinutesForOffset(Offset globalOffset, {String? excludeTaskId}) {
     final renderBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return null;
     final local = renderBox.globalToLocal(globalOffset);
-    return snappedMinutesForLocalY(local.dy, dayHeightPx: _dayHeight, pxPerHour: pxPerHour);
+    final gridSnapped = snappedMinutesForLocalY(local.dy, dayHeightPx: _dayHeight, pxPerHour: pxPerHour);
+
+    final neighborEndMinutes = [
+      for (final t in ref.read(todayScheduledTasksProvider))
+        if (t.id != excludeTaskId)
+          for (final r in t.estimatedExecutionTimeRanges)
+            if (dateOnly(r.start) == widget.today) r.end.hour * 60 + r.end.minute,
+    ];
+    return snapToNeighborEnd(gridSnapped, neighborEndMinutes).clamp(0, 24 * 60 - 15);
   }
 
   Future<void> _handleDrop(Task task, Offset globalOffset) async {
-    final snapped = _snappedMinutesForOffset(globalOffset);
+    final snapped = _snappedMinutesForOffset(globalOffset, excludeTaskId: task.id);
     if (snapped == null) return;
 
     final activeHours =
@@ -182,7 +196,7 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
 
     if (!dropNeedsConfirmation(droppedMinutes: snapped, durationMinutes: durationMinutes, activeHours: activeHours)) {
       final segments = directDropPlacement(droppedMinutes: snapped, durationMinutes: durationMinutes);
-      ref.read(taskRepositoryProvider).scheduleTaskRanges(task, taskTimeRangesForDay(widget.today, segments));
+      await _persistPlacement(task, segments);
       return;
     }
 
@@ -223,10 +237,76 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
       durationMinutes: durationMinutes,
       activeHours: activeHours,
     );
-    await ref.read(taskRepositoryProvider).updateTask(task.copyWith(
-          estimatedExecutionTimeRanges: taskTimeRangesForDay(widget.today, placement.segments),
+    await ref.read(taskRepositoryProvider).scheduleTaskRanges(
+          task,
+          taskTimeRangesForDay(widget.today, placement.segments),
           constrainedToWorkingHours: placement.constrainedToWorkingHours,
-        ));
+        );
+    await _cascadeOthersIfNeeded(task, placement.segments);
+  }
+
+  /// Persists [task]'s new placement at [segments] (a direct, unconfirmed
+  /// drop — see [directDropPlacement]), then, unless [allowOverlapProvider]
+  /// is on, cascades any other tasks scheduled today that now overlap it.
+  Future<void> _persistPlacement(Task task, List<TimeRange> segments) async {
+    await ref.read(taskRepositoryProvider).scheduleTaskRanges(task, taskTimeRangesForDay(widget.today, segments));
+    await _cascadeOthersIfNeeded(task, segments);
+  }
+
+  /// If overlaps aren't allowed, pushes forward any other task scheduled
+  /// today whose time now collides with [task]'s freshly-placed [segments],
+  /// cascading further pushes as needed (see [resolveOverlapFreeDrop]).
+  /// [task]'s own placement is never altered here — it already landed
+  /// exactly where dropped.
+  Future<void> _cascadeOthersIfNeeded(Task task, List<TimeRange> segments) async {
+    if (ref.read(allowOverlapProvider)) return;
+    if (segments.isEmpty) return;
+
+    final droppedStart = segments.first.startMinutes;
+    final droppedEnd = segments.last.endMinutes;
+
+    final otherTasks = ref.read(todayScheduledTasksProvider).where((t) => t.id != task.id).toList();
+    final otherBlocks = [
+      for (final t in otherTasks)
+        if (_todayBlockMinutes(t) case (final start, final end))
+          ReorderedBlock(taskId: t.id, startMinutes: start, endMinutes: end),
+    ];
+
+    final resolved = resolveOverlapFreeDrop(
+      draggedTaskId: task.id,
+      droppedStart: droppedStart,
+      durationMinutes: droppedEnd - droppedStart,
+      otherBlocks: otherBlocks,
+    );
+
+    final otherTasksById = {for (final t in otherTasks) t.id: t};
+    final repo = ref.read(taskRepositoryProvider);
+    await Future.wait([
+      for (final block in resolved)
+        if (otherTasksById[block.taskId] case final other?)
+          repo.scheduleTaskRanges(
+            other,
+            taskTimeRangesForDay(widget.today, [TimeRange(startMinutes: block.startMinutes, endMinutes: block.endMinutes)]),
+          ),
+    ]);
+  }
+
+  /// The minutes-since-midnight span [task] occupies on [widget.today],
+  /// spanning from the earliest to the latest of its ranges for that day
+  /// (collapsing any break-split segments into one contiguous block, the
+  /// same simplification [directDropPlacement] already makes for a single
+  /// drop).
+  (int, int) _todayBlockMinutes(Task task) {
+    final ranges = task.estimatedExecutionTimeRanges.where((r) => dateOnly(r.start) == widget.today);
+    var start = 24 * 60;
+    var end = 0;
+    for (final r in ranges) {
+      final s = r.start.hour * 60 + r.start.minute;
+      final e = r.end.hour * 60 + r.end.minute;
+      if (s < start) start = s;
+      if (e > end) end = e;
+    }
+    return (start, end);
   }
 
   List<_RenderSegment> _flattenSegments(List<Task> tasks) {
@@ -332,7 +412,9 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
     final activeHours = ref.watch(userSettingsStreamProvider).value?.activeHourRanges ?? defaultActiveHourRanges;
     final dragPreview = ref.watch(dragPreviewProvider);
     final previewMinutes =
-        dragPreview == null ? null : _snappedMinutesForOffset(dragPreview.globalPosition);
+        dragPreview == null
+            ? null
+            : _snappedMinutesForOffset(dragPreview.globalPosition, excludeTaskId: dragPreview.task.id);
     final renderSegments = _flattenSegments(scheduledTasks);
 
     return DragTarget<Task>(
@@ -534,7 +616,7 @@ class _ScheduledBlock extends ConsumerWidget {
       height: height,
       clipBehavior: isTiny ? Clip.none : Clip.hardEdge,
       decoration: BoxDecoration(
-        color: style.color.withValues(alpha: 0.85),
+        color: style.color,
         borderRadius: BorderRadius.circular(4),
         // A visibly dark seam (rather than a page-background-colored one, or
         // no border at all) so back-to-back blocks (one ending exactly when

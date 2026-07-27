@@ -9,7 +9,6 @@ import '../../models/goal.dart';
 import '../../models/habit.dart';
 import '../../models/task.dart';
 import '../../providers/app_providers.dart';
-import '../../widgets/sign_out_button.dart';
 
 class InsightsScreen extends ConsumerWidget {
   const InsightsScreen({super.key});
@@ -23,7 +22,7 @@ class InsightsScreen extends ConsumerWidget {
     final now = ref.watch(clockProvider).now();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Insights'), actions: const [SignOutButton()]),
+      appBar: AppBar(title: const Text('Insights')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../core/platform_support.dart';
 import '../features/settings/settings_screen.dart';
 
 class SettingsButton extends StatelessWidget {
@@ -8,7 +7,6 @@ class SettingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!isAndroidPlatform) return const SizedBox.shrink();
     return IconButton(
       icon: const Icon(Icons.settings),
       tooltip: 'Settings',

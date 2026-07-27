@@ -48,6 +48,26 @@ int? virtualMinutesFromReal(int realMinutes, List<TimeRange> activeHours) {
   return null;
 }
 
+/// Maps a real wall-clock deadline (minutes since midnight) to its position
+/// on the virtual working timeline — "how much active time has elapsed by
+/// the time the clock reaches this deadline." Unlike [virtualMinutesFromReal]
+/// this never returns null: a deadline before the first active-hours range
+/// maps to 0 (no active time is available before it), a deadline at or after
+/// the end of the last range maps to [totalActiveMinutes] (the full day is
+/// available), and a deadline that falls inside a break snaps down to the
+/// cumulative active minutes at the end of the range immediately before that
+/// break, since time spent in a break can never count toward meeting it.
+int virtualDeadlineFromReal(int realMinutes, List<TimeRange> activeHours) {
+  var cursor = 0;
+  for (final r in _sorted(activeHours)) {
+    if (realMinutes < r.startMinutes) return cursor;
+    final length = r.endMinutes - r.startMinutes;
+    if (realMinutes < r.endMinutes) return cursor + (realMinutes - r.startMinutes);
+    cursor += length;
+  }
+  return cursor;
+}
+
 /// Splits a virtual `[virtualStart, virtualEnd)` interval into one
 /// real-time [TimeRange] per active-hours range it touches. A block that
 /// starts before a break and runs past it comes back as two (or more)

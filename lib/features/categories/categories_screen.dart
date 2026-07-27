@@ -5,7 +5,6 @@ import '../../core/color_utils.dart';
 import '../../models/category.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/settings_button.dart';
-import '../../widgets/sign_out_button.dart';
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -18,7 +17,7 @@ class CategoriesScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Categories'),
-        actions: const [SettingsButton(), SignOutButton()],
+        actions: const [SettingsButton()],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCategoryDialog(context, ref),

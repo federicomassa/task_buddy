@@ -13,7 +13,6 @@ import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/goal_card.dart';
 import '../../widgets/habit_progress_card.dart';
 import '../../widgets/settings_button.dart';
-import '../../widgets/sign_out_button.dart';
 import '../tasks/task_form.dart';
 import 'goal_form.dart';
 import 'habit_form.dart';
@@ -111,7 +110,7 @@ class GoalsScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Goals & Habits'),
           bottom: const TabBar(tabs: [Tab(text: 'Goals'), Tab(text: 'Habits')]),
-          actions: const [SettingsButton(), SignOutButton()],
+          actions: const [SettingsButton()],
         ),
         body: const TabBarView(
           children: [_GoalsTab(), _HabitsTab()],

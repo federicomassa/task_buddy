@@ -28,9 +28,13 @@ class TaskTile extends StatelessWidget {
         .map((id) => categoryById(categories, id))
         .whereType<Category>()
         .toList();
+    final isUnclaimed = task.isFamilyTask && task.ownerIds.isEmpty;
 
     final tile = ListTile(
-      leading: Checkbox(value: task.isCompleted, onChanged: onToggle),
+      leading: Checkbox(
+        value: task.isCompleted,
+        onChanged: isUnclaimed ? null : onToggle,
+      ),
       title: Text(
         task.title,
         style: task.isCompleted
@@ -41,6 +45,17 @@ class TaskTile extends StatelessWidget {
         spacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          if (task.isFamilyTask)
+            Chip(
+              avatar: const Icon(Icons.group, size: 14, color: Colors.white),
+              label: Text(
+                isUnclaimed ? 'Family · Unclaimed' : 'Family',
+                style: const TextStyle(fontSize: 11, color: Colors.white),
+              ),
+              backgroundColor: Colors.pink,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           if (task.dueDate != null)
             Text(DateFormat.yMMMd().add_Hm().format(task.dueDate!)),
           if (task.estimatedExecutionTimeRanges.isNotEmpty)
@@ -57,7 +72,16 @@ class TaskTile extends StatelessWidget {
           : null,
     );
 
-    if (onTap == null) return tile;
+    final styledTile = task.isFamilyTask
+        ? DecoratedBox(
+            decoration: const BoxDecoration(
+              border: Border(left: BorderSide(color: Colors.pink, width: 4)),
+            ),
+            child: tile,
+          )
+        : tile;
+
+    if (onTap == null || isUnclaimed) return styledTile;
 
     // A single GestureDetector handles both taps so the arena can tell a
     // single tap from the first half of a double tap; without onDoubleTap
@@ -65,7 +89,7 @@ class TaskTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       onDoubleTap: () {},
-      child: tile,
+      child: styledTile,
     );
   }
 }

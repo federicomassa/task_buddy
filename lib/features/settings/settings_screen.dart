@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform_support.dart';
 import '../../models/user_settings.dart';
 import '../../providers/app_providers.dart';
+import '../family/family_management_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -175,6 +176,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: Text(time.format(context)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: settings.reminderEnabled ? () => _pickReminderTime(settings) : null,
+              ),
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text(
+                  'Family',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.family_restroom),
+                title: const Text('Manage family'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const FamilyManagementScreen()),
+                ),
               ),
               const Divider(),
               const Padding(

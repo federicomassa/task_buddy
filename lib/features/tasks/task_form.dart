@@ -43,6 +43,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
   String? _linkedGoalId;
   bool _isImportant = false;
   bool _isUrgent = false;
+  bool _isFamilyTask = false;
 
   @override
   void initState() {
@@ -59,6 +60,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
       _linkedGoalId = task.linkedGoalId;
       _isImportant = task.isImportant;
       _isUrgent = task.isUrgent;
+      _isFamilyTask = task.isFamilyTask;
       final estimate = task.estimatedDuration;
       if (estimate != null) {
         final parts = DurationParts.fromDuration(estimate);
@@ -156,6 +158,7 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
     final repo = ref.read(taskRepositoryProvider);
     final existing = widget.task;
     final ranges = _computeRanges();
+    final familyId = ref.read(myFamilyIdStreamProvider).value;
 
     if (existing == null) {
       final draft = Task(
@@ -174,6 +177,8 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
         isImportant: _isImportant,
         isUrgent: _isUrgent,
         constrainedToWorkingHours: _constrainedToWorkingHours,
+        isFamilyTask: _isFamilyTask,
+        familyId: _isFamilyTask ? familyId : null,
       );
       repo.addTask(draft).catchError((e) => ref.read(errorReporterProvider).report(e));
     } else {
@@ -197,6 +202,15 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
             constrainedToWorkingHours: _constrainedToWorkingHours,
           ))
           .catchError((e) => ref.read(errorReporterProvider).report(e));
+
+      // Ownership/family-flag state is mutated only via setFamilyTask, kept
+      // out of updateTask's field map so a routine property edit can never
+      // accidentally clobber claim state.
+      if (_isFamilyTask != existing.isFamilyTask) {
+        repo
+            .setFamilyTask(existing, isFamilyTask: _isFamilyTask, familyId: _isFamilyTask ? familyId : null)
+            .catchError((e) => ref.read(errorReporterProvider).report(e));
+      }
     }
 
     Navigator.of(context).pop();
@@ -302,6 +316,14 @@ class _TaskFormDialogState extends ConsumerState<TaskFormDialog> {
               value: _isUrgent,
               onChanged: (v) => setState(() => _isUrgent = v),
             ),
+            if (ref.watch(isInFamilyProvider))
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Family task'),
+                subtitle: const Text('Shared with your family; locked until someone claims it'),
+                value: _isFamilyTask,
+                onChanged: (v) => setState(() => _isFamilyTask = v),
+              ),
             if (_isRecurrent)
               DropdownButtonFormField<RecurrenceRule>(
                 initialValue: _recurrenceRule,

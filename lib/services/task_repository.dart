@@ -30,6 +30,22 @@ abstract class TaskRepository {
   Future<void> scheduleTaskRanges(Task task, List<TaskTimeRange> ranges, {bool? constrainedToWorkingHours});
 
   Future<void> unscheduleTask(Task task);
+
+  /// Marks/unmarks [task] as a Family task. Marking it locks it out of
+  /// anyone's personal task pool (ownerIds becomes empty) until a family
+  /// member claims it; unmarking returns it to its creator's pool.
+  Future<void> setFamilyTask(Task task, {required bool isFamilyTask, String? familyId});
+
+  /// Claims ownership of an unclaimed family task, adding it to [uid]'s
+  /// personal task pool.
+  Future<void> claimOwnership(Task task, String uid);
+
+  Future<void> releaseOwnership(Task task, String uid);
+
+  /// All Family tasks in [familyId], claimed or not — so a family member can
+  /// see edits to a task even after someone else has claimed it, not just
+  /// while it's unclaimed.
+  Stream<List<Task>> streamFamilyTasks(String familyId);
 }
 
 class FirestoreTaskRepository implements TaskRepository {
@@ -45,7 +61,7 @@ class FirestoreTaskRepository implements TaskRepository {
   @override
   Stream<List<Task>> streamTasks(String userId) {
     return _collection
-        .where('userId', isEqualTo: userId)
+        .where('ownerIds', arrayContains: userId)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map((d) => Task.fromFirestore(d, now: _clock.now())).toList());
@@ -58,6 +74,9 @@ class FirestoreTaskRepository implements TaskRepository {
     data['isCompleted'] = false;
     data['completedAt'] = null;
     data['createdAt'] = Timestamp.now();
+    // A family task starts unclaimed (locked, per requirement) regardless of
+    // who created it; a personal task's creator is its sole initial owner.
+    data['ownerIds'] = draft.isFamilyTask ? <String>[] : [draft.userId];
     return _collection.add(data);
   }
 
@@ -129,5 +148,42 @@ class FirestoreTaskRepository implements TaskRepository {
   @override
   Future<void> unscheduleTask(Task task) {
     return updateTask(task.copyWith(estimatedExecutionTimeRanges: const <TaskTimeRange>[]));
+  }
+
+  // isFamilyTask/familyId/ownerIds are deliberately NOT part of updateTask's
+  // field map above — they're mutated only through the methods below, so a
+  // routine "edit title" save from the task form can never accidentally
+  // clobber ownership/claim state.
+
+  @override
+  Future<void> setFamilyTask(Task task, {required bool isFamilyTask, String? familyId}) {
+    return _collection.doc(task.id).update({
+      'isFamilyTask': isFamilyTask,
+      'familyId': isFamilyTask ? familyId : null,
+      'ownerIds': isFamilyTask ? <String>[] : [task.userId],
+    });
+  }
+
+  @override
+  Future<void> claimOwnership(Task task, String uid) {
+    return _collection.doc(task.id).update({
+      'ownerIds': FieldValue.arrayUnion([uid]),
+    });
+  }
+
+  @override
+  Future<void> releaseOwnership(Task task, String uid) {
+    return _collection.doc(task.id).update({
+      'ownerIds': FieldValue.arrayRemove([uid]),
+    });
+  }
+
+  @override
+  Stream<List<Task>> streamFamilyTasks(String familyId) {
+    return _collection
+        .where('familyId', isEqualTo: familyId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => Task.fromFirestore(d, now: _clock.now())).toList());
   }
 }

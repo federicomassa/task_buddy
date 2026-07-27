@@ -38,5 +38,30 @@ void main() {
       final copy = task.copyWith(title: 'renamed');
       expect(copy.estimatedExecutionTimeRanges, task.estimatedExecutionTimeRanges);
     });
+
+    test('clears familyId to null', () {
+      final task = buildTask().copyWith(isFamilyTask: true, familyId: 'f1');
+      final cleared = task.copyWith(isFamilyTask: false, familyId: null);
+      expect(cleared.familyId, isNull);
+    });
+
+    test('replaces familyId with a new value', () {
+      final task = buildTask();
+      final updated = task.copyWith(familyId: 'f1');
+      expect(updated.familyId, 'f1');
+    });
+
+    test('omitting familyId leaves it unchanged', () {
+      final task = buildTask().copyWith(isFamilyTask: true, familyId: 'f1');
+      final copy = task.copyWith(title: 'renamed');
+      expect(copy.familyId, 'f1');
+    });
+  });
+
+  group('Task defaults', () {
+    test('a task with no explicit ownerIds defaults to owning itself', () {
+      final task = buildTask();
+      expect(task.ownerIds, ['u1']);
+    });
   });
 }

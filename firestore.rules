@@ -2,8 +2,30 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isFamilyMember(familyId) {
+      return familyId != null &&
+        exists(/databases/$(database)/documents/families/$(familyId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.memberIds;
+    }
+
+    // User settings document: one per user, keyed by UID
+    match /userSettings/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Tasks created before the Family feature shipped have no `ownerIds`
+    // field at all; treat them as owned solely by their creator so they
+    // don't become unreadable/unwritable after this rules update deploys.
+    function ownerIdsOf(task) {
+      return task.get('ownerIds', [task.userId]);
     }
 
     match /categories/{docId} {
@@ -22,8 +44,95 @@ service cloud.firestore {
     }
 
     match /tasks/{docId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
+
+      allow read: if
+        // personal tasks / claimed family tasks: user is in ownerIds (query-friendly for arrayContains)
+        (resource.data.ownerIds != null && request.auth.uid in resource.data.ownerIds) ||
+        // fallback for legacy tasks without ownerIds: user is the creator
+        (resource.data.ownerIds == null && request.auth.uid == resource.data.userId) ||
+        // family tasks visible to all family members (even if unclaimed)
+        (resource.data.get('isFamilyTask', false) == true &&
+          isFamilyMember(resource.data.get('familyId', null)));
+
+      allow update: if
+        // normal edits by a current owner
+        (resource.data.ownerIds != null && resource.data.ownerIds.hasAny([request.auth.uid])) ||
+        (resource.data.ownerIds == null && request.auth.uid == resource.data.userId) ||
+        // claiming: any family member not already an owner can add
+        // themselves, whether the task is unclaimed or already has other
+        // owners -- multiple members may claim the same task
+        (
+          resource.data.get('isFamilyTask', false) == true &&
+          isFamilyMember(resource.data.get('familyId', null)) &&
+          !(request.auth.uid in resource.data.ownerIds) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerIds']) &&
+          request.resource.data.ownerIds ==
+            (resource.data.ownerIds != null
+              ? resource.data.ownerIds.concat([request.auth.uid])
+              : [resource.data.userId, request.auth.uid])
+        );
+
+      allow delete: if
+        (resource.data.ownerIds != null && resource.data.ownerIds.hasAny([request.auth.uid])) ||
+        (resource.data.ownerIds == null && request.auth.uid == resource.data.userId);
+    }
+
+    // Pointer doc, one per user, mapping to their current family (if any).
+    // Only ever created (join) or deleted (leave) -- never updated -- which
+    // is what makes "at most one family per user" trivial to enforce: you
+    // can't create a doc that already exists.
+    match /userFamily/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow delete: if isOwner(uid);
+      allow update: if false;
+    }
+
+    match /familyInvites/{code} {
+      // Any signed-in user needs to be able to look up a code before joining.
+      allow read: if isSignedIn();
+      allow create: if isFamilyMember(request.resource.data.familyId) &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if
+        // redeem: invite must be active/unexpired, only redeemedBy changes
+        (
+          resource.data.status == 'active' &&
+          (resource.data.expiresAt == null || request.time < resource.data.expiresAt) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['redeemedBy'])
+        ) ||
+        // revoke: only a family member of the invite's family, only status changes
+        (
+          isFamilyMember(resource.data.familyId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+          request.resource.data.status == 'revoked'
+        );
+      allow delete: if isFamilyMember(resource.data.familyId);
+    }
+
+    match /families/{familyId} {
+      allow read: if isFamilyMember(familyId);
+      allow create: if isSignedIn() &&
+        request.resource.data.memberIds == [request.auth.uid] &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if
+        // self-service leave: a current member removing only themself
+        (
+          request.auth.uid in resource.data.memberIds &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members'])
+        ) ||
+        // join via invite: not yet a member, adding exactly self, confirmed
+        // by the userFamily pointer doc -- which must already be committed
+        // (written in a prior, separate request) since rules' get() calls
+        // only see state as of the start of the current write, never
+        // earlier writes from the same transaction/batch
+        (
+          !(request.auth.uid in resource.data.memberIds) &&
+          request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid]) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members']) &&
+          exists(/databases/$(database)/documents/userFamily/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/userFamily/$(request.auth.uid)).data.familyId == familyId
+        );
     }
   }
 }

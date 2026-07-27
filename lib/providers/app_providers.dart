@@ -11,8 +11,10 @@ import '../core/error_reporter.dart';
 import '../core/filter_state.dart';
 import '../core/today_task_filters.dart';
 import '../models/task.dart';
+import '../models/family.dart';
 import '../services/auth_service.dart';
 import '../services/category_repository.dart';
+import '../services/family_repository.dart';
 import '../services/goal_repository.dart';
 import '../services/habit_cycle_service.dart';
 import '../services/habit_repository.dart';
@@ -84,6 +86,10 @@ final userSettingsRepositoryProvider = Provider<UserSettingsRepository>((ref) {
   return FirestoreUserSettingsRepository(ref.watch(firestoreProvider));
 });
 
+final familyRepositoryProvider = Provider<FamilyRepository>((ref) {
+  return FirestoreFamilyRepository(ref.watch(firestoreProvider), ref.watch(clockProvider));
+});
+
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
 });
@@ -121,6 +127,33 @@ final tasksStreamProvider = StreamProvider((ref) {
 final userSettingsStreamProvider = StreamProvider((ref) {
   final userId = ref.watch(currentUserIdProvider);
   return ref.watch(userSettingsRepositoryProvider).streamSettings(userId);
+});
+
+final myFamilyIdStreamProvider = StreamProvider<String?>((ref) {
+  final userId = ref.watch(currentUserIdProvider);
+  return ref.watch(familyRepositoryProvider).streamMyFamilyId(userId);
+});
+
+final myFamilyStreamProvider = StreamProvider<Family?>((ref) {
+  final familyId = ref.watch(myFamilyIdStreamProvider).value;
+  if (familyId == null) return Stream.value(null);
+  return ref.watch(familyRepositoryProvider).streamFamily(familyId);
+});
+
+/// Whether the current user is a member of a family — gates the "Family
+/// task" toggle in the task form, since a task can't be marked Family
+/// without one to belong to.
+final isInFamilyProvider = Provider<bool>((ref) {
+  return ref.watch(myFamilyIdStreamProvider).value != null;
+});
+
+/// All of the current user's family's Family-tagged tasks, claimed or not —
+/// so a member can see another member's edits to a task even after it's
+/// been claimed, not just while it's sitting unclaimed.
+final familyTasksStreamProvider = StreamProvider<List<Task>>((ref) {
+  final familyId = ref.watch(myFamilyIdStreamProvider).value;
+  if (familyId == null) return Stream.value(const <Task>[]);
+  return ref.watch(taskRepositoryProvider).streamFamilyTasks(familyId);
 });
 
 /// Today's date, stripped of time-of-day. Centralized so every screen that

@@ -62,6 +62,9 @@ class Task {
   final bool isImportant;
   final bool isUrgent;
   final bool constrainedToWorkingHours;
+  final bool isFamilyTask;
+  final String? familyId;
+  final List<String> ownerIds;
 
   Task({
     required this.id,
@@ -81,7 +84,10 @@ class Task {
     this.isImportant = false,
     this.isUrgent = false,
     this.constrainedToWorkingHours = true,
-  });
+    this.isFamilyTask = false,
+    this.familyId,
+    List<String>? ownerIds,
+  }) : ownerIds = ownerIds ?? [userId];
 
   factory Task.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, {required DateTime now}) {
     final data = doc.data()!;
@@ -107,6 +113,9 @@ class Task {
       isImportant: data['isImportant'] as bool? ?? false,
       isUrgent: data['isUrgent'] as bool? ?? false,
       constrainedToWorkingHours: data['constrainedToWorkingHours'] as bool? ?? true,
+      isFamilyTask: data['isFamilyTask'] as bool? ?? false,
+      familyId: data['familyId'] as String?,
+      ownerIds: (data['ownerIds'] as List<dynamic>?)?.cast<String>() ?? [data['userId'] as String],
     );
   }
 
@@ -128,6 +137,9 @@ class Task {
       'isImportant': isImportant,
       'isUrgent': isUrgent,
       'constrainedToWorkingHours': constrainedToWorkingHours,
+      'isFamilyTask': isFamilyTask,
+      'familyId': familyId,
+      'ownerIds': ownerIds,
     };
   }
 
@@ -146,6 +158,9 @@ class Task {
     bool? isImportant,
     bool? isUrgent,
     bool? constrainedToWorkingHours,
+    bool? isFamilyTask,
+    Object? familyId = _unset,
+    List<String>? ownerIds,
   }) {
     return Task(
       id: id,
@@ -167,6 +182,9 @@ class Task {
       isImportant: isImportant ?? this.isImportant,
       isUrgent: isUrgent ?? this.isUrgent,
       constrainedToWorkingHours: constrainedToWorkingHours ?? this.constrainedToWorkingHours,
+      isFamilyTask: isFamilyTask ?? this.isFamilyTask,
+      familyId: identical(familyId, _unset) ? this.familyId : familyId as String?,
+      ownerIds: ownerIds ?? this.ownerIds,
     );
   }
 }

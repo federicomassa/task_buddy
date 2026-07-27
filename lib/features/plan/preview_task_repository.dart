@@ -46,4 +46,17 @@ class PreviewTaskRepository implements TaskRepository {
   Future<void> unscheduleTask(Task task) async {
     _preview.unschedule(task);
   }
+
+  @override
+  Future<void> setFamilyTask(Task task, {required bool isFamilyTask, String? familyId}) =>
+      _real.setFamilyTask(task, isFamilyTask: isFamilyTask, familyId: familyId);
+
+  @override
+  Future<void> claimOwnership(Task task, String uid) => _real.claimOwnership(task, uid);
+
+  @override
+  Future<void> releaseOwnership(Task task, String uid) => _real.releaseOwnership(task, uid);
+
+  @override
+  Stream<List<Task>> streamFamilyTasks(String familyId) => _real.streamFamilyTasks(familyId);
 }

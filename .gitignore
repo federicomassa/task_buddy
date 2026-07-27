@@ -16,6 +16,7 @@
 migrate_working_dir/
 node_modules/
 .firebase/
+*.backup
 
 # IntelliJ related
 *.iml

@@ -7,7 +7,7 @@ import '../../models/task.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/task_schedule_card.dart';
 import '../tasks/task_form.dart';
-import 'plan_summary_dialog.dart';
+import 'scheduling_summary_dialog.dart';
 
 const _quadrants = [
   (EisenhowerQuadrant.importantUrgent, 'P0 — Important & Urgent'),
@@ -18,13 +18,13 @@ const _quadrants = [
 
 /// Full-screen Eisenhower matrix: the user drags today's active tasks into
 /// importance/urgency quadrants, then "Schedule my day" auto-places them on
-/// the Today calendar in WSJF priority order.
+/// the Plan calendar in WSJF priority order.
 class HelpMePlanScreen extends ConsumerWidget {
   const HelpMePlanScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref.watch(planEligibleTasksProvider);
+    final tasks = ref.watch(scheduleEligibleTasksProvider);
     final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
     final settingsAsync = ref.watch(userSettingsStreamProvider);
     final today = ref.watch(todayProvider);

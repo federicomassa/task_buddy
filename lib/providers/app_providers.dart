@@ -61,7 +61,7 @@ final goalRepositoryProvider = Provider<GoalRepository>((ref) {
 });
 
 /// The real, Firestore-backed task repository. Kept separate from
-/// [taskRepositoryProvider] so the plan-preview screen can override just the
+/// [taskRepositoryProvider] so the scheduling-preview screen can override just the
 /// latter (to sandbox schedule writes in memory) while still reaching this
 /// one directly to flush the preview to Firestore on confirm.
 final realTaskRepositoryProvider = Provider<TaskRepository>((ref) {
@@ -163,22 +163,38 @@ final familyTasksStreamProvider = StreamProvider<List<Task>>((ref) {
 /// tasks due later today to be misclassified as overdue.
 final todayProvider = Provider<DateTime>((ref) => dateOnly(ref.watch(clockProvider).now()));
 
-/// Tasks due today or overdue, and not yet scheduled for today — candidates
-/// for the Today screen's unscheduled task list. Completed tasks are
-/// excluded since this list is for planning the day.
+class _SelectedPlanDateNotifier extends Notifier<DateTime> {
+  @override
+  DateTime build() => dateOnly(ref.watch(clockProvider).now());
+
+  void setDate(DateTime date) => state = date;
+
+  void resetToToday() => state = dateOnly(ref.watch(clockProvider).now());
+}
+
+/// User-selected date in the Plan screen, defaults to today. Separate from
+/// [todayProvider] so the Plan screen can show tasks for any date while
+/// preserving the literal "today" concept for overdue logic elsewhere.
+final selectedPlanDateProvider = NotifierProvider<_SelectedPlanDateNotifier, DateTime>(
+  _SelectedPlanDateNotifier.new,
+);
+
+/// Tasks due on the selected plan date or earlier, and not yet scheduled for
+/// that date — candidates for the Plan screen's unscheduled task list.
+/// Completed tasks are excluded since this list is for planning the day.
 final unscheduledTodayTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
-  return unscheduledTasksForToday(tasks, ref.watch(todayProvider));
+  return unscheduledTasksForToday(tasks, ref.watch(selectedPlanDateProvider));
 });
 
 /// Active tasks due today or earlier, regardless of whether they're already
 /// scheduled — the "Help me plan" matrix's pool. Unlike
-/// [unscheduledTodayTasksProvider] (which feeds the Today screen's
+/// [unscheduledTodayTasksProvider] (which feeds the Plan screen's
 /// unscheduled list and deliberately excludes anything already on the
 /// calendar), the matrix is for triaging the *whole* day, including tasks
 /// you've already dragged onto the calendar, so re-running "Schedule my day"
 /// can re-plan them too.
-final planEligibleTasksProvider = Provider<List<Task>>((ref) {
+final scheduleEligibleTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
   final today = ref.watch(todayProvider);
   return tasks.where((t) {
@@ -189,12 +205,12 @@ final planEligibleTasksProvider = Provider<List<Task>>((ref) {
   }).toList();
 });
 
-/// Tasks already scheduled for today — rendered as blocks on the Today
+/// Tasks already scheduled for the selected plan date — rendered as blocks on the Plan
 /// screen's calendar. Completed tasks stay visible (styled green) instead
 /// of disappearing.
 final todayScheduledTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(tasksStreamProvider).value ?? const <Task>[];
-  return scheduledTasksForToday(tasks, ref.watch(todayProvider));
+  return scheduledTasksForToday(tasks, ref.watch(selectedPlanDateProvider));
 });
 
 /// Live position of a task card being dragged toward the calendar (from

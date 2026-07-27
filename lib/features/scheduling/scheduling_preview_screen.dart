@@ -4,24 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/plan_scheduler.dart';
 import '../../models/task.dart';
 import '../../providers/app_providers.dart';
-import '../today/calendar_pane.dart';
-import '../today/unscheduled_list_pane.dart';
-import 'plan_preview_state.dart';
+import '../plan/calendar_pane.dart';
+import '../plan/unscheduled_list_pane.dart';
+import 'scheduling_preview_state.dart';
 import 'preview_task_repository.dart';
 
 /// Shows the proposed "Schedule my day" plan rendered exactly like the
-/// Today screen's body, but entirely sandboxed: every schedule-changing
+/// Plan screen's body, but entirely sandboxed: every schedule-changing
 /// write the user makes while adjusting it (drag-and-drop, unscheduling)
 /// lands in an in-memory notifier instead of Firestore. Nothing is
 /// persisted unless the user taps the confirm checkmark; backing out
 /// discards everything for free, since the nested ProviderScope holding
 /// the preview state is simply disposed.
-class PlanPreviewScreen extends StatelessWidget {
+class SchedulingPreviewScreen extends StatelessWidget {
   final PlanResult result;
   final List<Task> planTasks;
   final List<Task> freeTimeDrafts;
 
-  const PlanPreviewScreen({
+  const SchedulingPreviewScreen({
     super.key,
     required this.result,
     required this.planTasks,
@@ -38,20 +38,20 @@ class PlanPreviewScreen extends StatelessWidget {
 
     return ProviderScope(
       overrides: [
-        planPreviewProvider.overrideWith(() => PlanPreviewNotifier(initialState)),
+        schedulingPreviewProvider.overrideWith(() => SchedulingPreviewNotifier(initialState)),
         allowOverlapProvider.overrideWith(AllowOverlapNotifier.new),
         todayScheduledTasksProvider.overrideWith((ref) => mergedScheduledTasksForPreview(
               realTasks: ref.watch(tasksStreamProvider).value ?? const <Task>[],
-              preview: ref.watch(planPreviewProvider),
+              preview: ref.watch(schedulingPreviewProvider),
               today: ref.watch(todayProvider),
             )),
         unscheduledTodayTasksProvider.overrideWith((ref) => mergedUnscheduledTasksForPreview(
               realTasks: ref.watch(tasksStreamProvider).value ?? const <Task>[],
-              preview: ref.watch(planPreviewProvider),
+              preview: ref.watch(schedulingPreviewProvider),
               today: ref.watch(todayProvider),
             )),
         taskRepositoryProvider.overrideWith(
-          (ref) => PreviewTaskRepository(ref.watch(realTaskRepositoryProvider), ref.read(planPreviewProvider.notifier)),
+          (ref) => PreviewTaskRepository(ref.watch(realTaskRepositoryProvider), ref.read(schedulingPreviewProvider.notifier)),
         ),
       ],
       child: const _PlanPreviewBody(),
@@ -66,7 +66,7 @@ class _PlanPreviewBody extends ConsumerWidget {
 
   Future<void> _confirm(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(realTaskRepositoryProvider);
-    final preview = ref.read(planPreviewProvider);
+    final preview = ref.read(schedulingPreviewProvider);
     final realTasksById = {for (final t in ref.read(tasksStreamProvider).value ?? const <Task>[]) t.id: t};
     final navigator = Navigator.of(context);
 

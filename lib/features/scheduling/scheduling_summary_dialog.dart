@@ -6,8 +6,8 @@ import '../../core/plan_scheduler.dart';
 import '../../models/task.dart';
 import '../../models/user_settings.dart';
 import '../../providers/app_providers.dart';
-import 'plan_preview_screen.dart';
-import 'plan_preview_state.dart';
+import 'scheduling_preview_screen.dart';
+import 'scheduling_preview_state.dart';
 
 enum _CapacityChoice { proceed, insertFreeTime, goBack }
 
@@ -15,7 +15,7 @@ enum _InfeasibleChoice { goBack, scheduleRest }
 
 /// Entry point for the "Schedule my day" button: computes the WSJF plan, and
 /// if the estimated tasks don't fill the user's active hours, asks how to
-/// handle the shortfall — then pushes a [PlanPreviewScreen] so the user can
+/// handle the shortfall — then pushes a [SchedulingPreviewScreen] so the user can
 /// see and adjust the proposal before anything is written to Firestore.
 Future<void> runScheduleMyDay(
   BuildContext context,
@@ -140,6 +140,6 @@ void _pushPreview(
   required List<Task> freeTimeDrafts,
 }) {
   Navigator.of(context).push(MaterialPageRoute(
-    builder: (_) => PlanPreviewScreen(result: result, planTasks: planTasks, freeTimeDrafts: freeTimeDrafts),
+    builder: (_) => SchedulingPreviewScreen(result: result, planTasks: planTasks, freeTimeDrafts: freeTimeDrafts),
   ));
 }

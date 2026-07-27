@@ -496,12 +496,21 @@ class _HourGrid extends StatelessWidget {
 }
 
 /// A thin horizontal line marking the current time (now) on the calendar.
+/// Only shows when viewing the actual current day.
 class _NowLine extends ConsumerWidget {
   const _NowLine();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(clockProvider).now();
+    final selectedDate = ref.watch(selectedPlanDateProvider);
+    final today = ref.watch(todayProvider);
+
+    // Only show the line if we're viewing the actual current day
+    if (selectedDate != today) {
+      return const SizedBox.shrink();
+    }
+
     final nowMinutes = now.hour * 60 + now.minute;
     final top = nowMinutes / 60 * pxPerHour;
 

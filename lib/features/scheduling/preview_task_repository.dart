@@ -1,14 +1,14 @@
 import '../../models/task.dart';
 import '../../services/task_repository.dart';
-import 'plan_preview_state.dart';
+import 'scheduling_preview_state.dart';
 
 /// Wraps a real [TaskRepository] and redirects schedule-changing writes into
-/// a [PlanPreviewNotifier] instead of Firestore, so the plan-preview
+/// a [SchedulingPreviewNotifier] instead of Firestore, so the scheduling-preview
 /// screen's calendar/unscheduled-list widgets (unmodified) can be dragged
 /// around freely with nothing persisted until the user confirms.
 class PreviewTaskRepository implements TaskRepository {
   final TaskRepository _real;
-  final PlanPreviewNotifier _preview;
+  final SchedulingPreviewNotifier _preview;
 
   PreviewTaskRepository(this._real, this._preview);
 

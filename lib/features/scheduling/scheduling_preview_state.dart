@@ -24,21 +24,21 @@ class ScheduleOverride {
   const ScheduleOverride({required this.ranges, required this.constrainedToWorkingHours});
 }
 
-class PlanPreviewState {
+class SchedulingPreviewState {
   final Map<String, ScheduleOverride> overridesByTaskId;
   final List<Task> syntheticTasks;
 
-  const PlanPreviewState({this.overridesByTaskId = const {}, this.syntheticTasks = const []});
+  const SchedulingPreviewState({this.overridesByTaskId = const {}, this.syntheticTasks = const []});
 
-  PlanPreviewState copyWith({Map<String, ScheduleOverride>? overridesByTaskId, List<Task>? syntheticTasks}) {
-    return PlanPreviewState(
+  SchedulingPreviewState copyWith({Map<String, ScheduleOverride>? overridesByTaskId, List<Task>? syntheticTasks}) {
+    return SchedulingPreviewState(
       overridesByTaskId: overridesByTaskId ?? this.overridesByTaskId,
       syntheticTasks: syntheticTasks ?? this.syntheticTasks,
     );
   }
 }
 
-List<Task> _applyOverrides(List<Task> realTasks, PlanPreviewState preview) {
+List<Task> _applyOverrides(List<Task> realTasks, SchedulingPreviewState preview) {
   return [
     for (final t in realTasks)
       if (preview.overridesByTaskId[t.id] case final o?)
@@ -56,7 +56,7 @@ List<Task> _applyOverrides(List<Task> realTasks, PlanPreviewState preview) {
 /// then applies the ordinary "scheduled today" filter.
 List<Task> mergedScheduledTasksForPreview({
   required List<Task> realTasks,
-  required PlanPreviewState preview,
+  required SchedulingPreviewState preview,
   required DateTime today,
 }) {
   return scheduledTasksForToday(_applyOverrides(realTasks, preview), today);
@@ -66,22 +66,22 @@ List<Task> mergedScheduledTasksForPreview({
 /// then applies the ordinary "unscheduled today" filter.
 List<Task> mergedUnscheduledTasksForPreview({
   required List<Task> realTasks,
-  required PlanPreviewState preview,
+  required SchedulingPreviewState preview,
   required DateTime today,
 }) {
   return unscheduledTasksForToday(_applyOverrides(realTasks, preview), today);
 }
 
-/// Computes the plan preview's starting state right after
+/// Computes the scheduling preview's starting state right after
 /// `runScheduleMyDay`'s dialogs resolve, mirroring the old direct-apply
 /// logic: a task in [planTasks] that [result] placed gets staged with its
 /// new ranges; one that didn't get placed but previously had ranges gets
 /// staged as cleared; anything else in [planTasks] is left untouched.
 /// [freeTimeDrafts] (if any) become the preview's synthetic tasks as-is.
-/// Pure, so it can run at [PlanPreviewNotifier] construction time rather
+/// Pure, so it can run at [SchedulingPreviewNotifier] construction time rather
 /// than as an imperative post-mount mutation (which would race Riverpod's
 /// "no modifying providers during build" guard).
-PlanPreviewState computeInitialPreviewState({
+SchedulingPreviewState computeInitialPreviewState({
   required List<Task> planTasks,
   required PlanResult result,
   required List<Task> freeTimeDrafts,
@@ -95,16 +95,16 @@ PlanPreviewState computeInitialPreviewState({
       overrides[task.id] = const ScheduleOverride(ranges: null, constrainedToWorkingHours: true);
     }
   }
-  return PlanPreviewState(overridesByTaskId: overrides, syntheticTasks: freeTimeDrafts);
+  return SchedulingPreviewState(overridesByTaskId: overrides, syntheticTasks: freeTimeDrafts);
 }
 
-class PlanPreviewNotifier extends Notifier<PlanPreviewState> {
-  final PlanPreviewState _initialState;
+class SchedulingPreviewNotifier extends Notifier<SchedulingPreviewState> {
+  final SchedulingPreviewState _initialState;
 
-  PlanPreviewNotifier([this._initialState = const PlanPreviewState()]);
+  SchedulingPreviewNotifier([this._initialState = const SchedulingPreviewState()]);
 
   @override
-  PlanPreviewState build() => _initialState;
+  SchedulingPreviewState build() => _initialState;
 
   void scheduleRanges(Task task, List<TaskTimeRange> ranges, {bool? constrainedToWorkingHours}) {
     if (isSyntheticFreeTimeId(task.id)) {
@@ -148,4 +148,4 @@ class PlanPreviewNotifier extends Notifier<PlanPreviewState> {
   }
 }
 
-final planPreviewProvider = NotifierProvider<PlanPreviewNotifier, PlanPreviewState>(PlanPreviewNotifier.new);
+final schedulingPreviewProvider = NotifierProvider<SchedulingPreviewNotifier, SchedulingPreviewState>(SchedulingPreviewNotifier.new);

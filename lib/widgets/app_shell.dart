@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/categories/categories_screen.dart';
 import '../features/goals/goals_screen.dart';
 import '../features/tasks/tasks_screen.dart';
-import '../features/today/today_screen.dart';
+import '../features/plan/plan_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -18,14 +18,14 @@ class _AppShellState extends State<AppShell> {
   static const double _wideBreakpoint = 720;
 
   static const _destinations = [
-    NavigationDestination(icon: Icon(Icons.today_outlined), selectedIcon: Icon(Icons.today), label: 'Today'),
+    NavigationDestination(icon: Icon(Icons.today_outlined), selectedIcon: Icon(Icons.today), label: 'Plan'),
     NavigationDestination(icon: Icon(Icons.check_box_outlined), selectedIcon: Icon(Icons.check_box), label: 'Tasks'),
     NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'Goals'),
     NavigationDestination(icon: Icon(Icons.label_outline), selectedIcon: Icon(Icons.label), label: 'Categories'),
   ];
 
   static const _pages = [
-    TodayScreen(),
+    PlanScreen(),
     TasksScreen(),
     GoalsScreen(),
     CategoriesScreen(),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:task_buddy/features/today/today_screen.dart';
+import 'package:task_buddy/features/plan/plan_screen.dart';
 import 'package:task_buddy/models/category.dart';
 import 'package:task_buddy/models/goal.dart';
 import 'package:task_buddy/models/task.dart';
@@ -135,8 +135,8 @@ void main() {
 
   // Regression test for a fixed SizedBox(height: 400) calendar pane that
   // overflowed the Column whenever the available body height dropped
-  // below ~401px; today_screen.dart now uses Expanded(flex: 2) instead.
-  testWidgets('TodayScreen mobile layout at a screen height that leaves it tight', (tester) async {
+  // below ~401px; plan_screen.dart now uses Expanded(flex: 2) instead.
+  testWidgets('PlanScreen mobile layout at a screen height that leaves it tight', (tester) async {
     tester.view.physicalSize = const Size(360, 420);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -148,7 +148,7 @@ void main() {
           tasksStreamProvider.overrideWith((ref) => const Stream<List<Task>>.empty()),
           categoriesStreamProvider.overrideWith((ref) => const Stream<List<Category>>.empty()),
         ],
-        child: const MaterialApp(home: TodayScreen()),
+        child: const MaterialApp(home: PlanScreen()),
       ),
     );
     await tester.pumpAndSettle();

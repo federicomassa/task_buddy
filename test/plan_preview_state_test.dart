@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_buddy/core/plan_scheduler.dart';
-import 'package:task_buddy/features/plan/plan_preview_state.dart';
+import 'package:task_buddy/features/scheduling/scheduling_preview_state.dart';
 import 'package:task_buddy/models/task.dart';
 
 void main() {
@@ -96,7 +96,7 @@ void main() {
   group('mergedScheduledTasksForPreview / mergedUnscheduledTasksForPreview', () {
     test('an overridden real task appears scheduled at its new time, not its old one', () {
       final task = buildTask('a', ranges: [rangeAt(8)]);
-      final preview = PlanPreviewState(overridesByTaskId: {
+      final preview = SchedulingPreviewState(overridesByTaskId: {
         'a': ScheduleOverride(ranges: [rangeAt(10)], constrainedToWorkingHours: true),
       });
 
@@ -107,7 +107,7 @@ void main() {
 
     test('a synthetic free-time task with ranges appears in the scheduled list', () {
       final freeTime = buildTask(syntheticFreeTimeId(0), ranges: [rangeAt(14)]);
-      final preview = PlanPreviewState(syntheticTasks: [freeTime]);
+      final preview = SchedulingPreviewState(syntheticTasks: [freeTime]);
 
       final scheduled = mergedScheduledTasksForPreview(realTasks: const [], preview: preview, today: today);
       expect(scheduled.map((t) => t.id), [syntheticFreeTimeId(0)]);
@@ -116,7 +116,7 @@ void main() {
     test('a synthetic task dragged off the calendar (emptied ranges) disappears from scheduled '
         'without reappearing as unscheduled', () {
       final freeTime = buildTask(syntheticFreeTimeId(0), ranges: const []);
-      final preview = PlanPreviewState(syntheticTasks: [freeTime]);
+      final preview = SchedulingPreviewState(syntheticTasks: [freeTime]);
 
       final scheduled = mergedScheduledTasksForPreview(realTasks: const [], preview: preview, today: today);
       final unscheduled = mergedUnscheduledTasksForPreview(realTasks: const [], preview: preview, today: today);
@@ -131,7 +131,7 @@ void main() {
 
     test('an override that clears a real task moves it into the unscheduled list', () {
       final task = buildTask('a', ranges: [rangeAt(8)]);
-      final preview = PlanPreviewState(overridesByTaskId: {
+      final preview = SchedulingPreviewState(overridesByTaskId: {
         'a': const ScheduleOverride(ranges: null, constrainedToWorkingHours: true),
       });
 
@@ -144,14 +144,14 @@ void main() {
 
     test('a task untouched by the preview keeps its real schedule', () {
       final task = buildTask('a', ranges: [rangeAt(8)]);
-      const preview = PlanPreviewState();
+      const preview = SchedulingPreviewState();
 
       final scheduled = mergedScheduledTasksForPreview(realTasks: [task], preview: preview, today: today);
       expect(scheduled.single.estimatedExecutionTimeRanges, [rangeAt(8)]);
     });
   });
 
-  group('PlanPreviewNotifier write paths', () {
+  group('SchedulingPreviewNotifier write paths', () {
     late ProviderContainer container;
 
     setUp(() => container = ProviderContainer());
@@ -159,23 +159,23 @@ void main() {
 
     test('scheduleRanges on a real task stages an override', () {
       final task = buildTask('a');
-      container.read(planPreviewProvider.notifier).scheduleRanges(task, [rangeAt(11)]);
+      container.read(schedulingPreviewProvider.notifier).scheduleRanges(task, [rangeAt(11)]);
 
-      expect(container.read(planPreviewProvider).overridesByTaskId['a']!.ranges, [rangeAt(11)]);
+      expect(container.read(schedulingPreviewProvider).overridesByTaskId['a']!.ranges, [rangeAt(11)]);
     });
 
     test('scheduleRanges on a synthetic task updates it in place instead of creating an override', () {
       final freeTime = buildTask(syntheticFreeTimeId(0), ranges: [rangeAt(14)]);
       final seededContainer = ProviderContainer(overrides: [
-        planPreviewProvider.overrideWith(
-          () => PlanPreviewNotifier(PlanPreviewState(syntheticTasks: [freeTime])),
+        schedulingPreviewProvider.overrideWith(
+          () => SchedulingPreviewNotifier(SchedulingPreviewState(syntheticTasks: [freeTime])),
         ),
       ]);
       addTearDown(seededContainer.dispose);
 
-      seededContainer.read(planPreviewProvider.notifier).scheduleRanges(freeTime, [rangeAt(16)]);
+      seededContainer.read(schedulingPreviewProvider.notifier).scheduleRanges(freeTime, [rangeAt(16)]);
 
-      final state = seededContainer.read(planPreviewProvider);
+      final state = seededContainer.read(schedulingPreviewProvider);
       expect(state.overridesByTaskId, isEmpty);
       expect(state.syntheticTasks.single.estimatedExecutionTimeRanges, [rangeAt(16)]);
     });
@@ -183,15 +183,15 @@ void main() {
     test('deleteSynthetic removes the free-time task outright', () {
       final freeTime = buildTask(syntheticFreeTimeId(0), ranges: [rangeAt(14)]);
       final seededContainer = ProviderContainer(overrides: [
-        planPreviewProvider.overrideWith(
-          () => PlanPreviewNotifier(PlanPreviewState(syntheticTasks: [freeTime])),
+        schedulingPreviewProvider.overrideWith(
+          () => SchedulingPreviewNotifier(SchedulingPreviewState(syntheticTasks: [freeTime])),
         ),
       ]);
       addTearDown(seededContainer.dispose);
 
-      seededContainer.read(planPreviewProvider.notifier).deleteSynthetic(syntheticFreeTimeId(0));
+      seededContainer.read(schedulingPreviewProvider.notifier).deleteSynthetic(syntheticFreeTimeId(0));
 
-      expect(seededContainer.read(planPreviewProvider).syntheticTasks, isEmpty);
+      expect(seededContainer.read(schedulingPreviewProvider).syntheticTasks, isEmpty);
     });
   });
 }

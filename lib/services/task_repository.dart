@@ -181,6 +181,7 @@ class FirestoreTaskRepository implements TaskRepository {
   @override
   Stream<List<Task>> streamFamilyTasks(String familyId) {
     return _collection
+        .where('isFamilyTask', isEqualTo: true)
         .where('familyId', isEqualTo: familyId)
         .orderBy('createdAt', descending: true)
         .snapshots()

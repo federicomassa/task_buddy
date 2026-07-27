@@ -26,13 +26,6 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
-    // Tasks created before the Family feature shipped have no `ownerIds`
-    // field at all; treat them as owned solely by their creator so they
-    // don't become unreadable/unwritable after this rules update deploys.
-    function ownerIdsOf(task) {
-      return task.get('ownerIds', [task.userId]);
-    }
-
     match /categories/{docId} {
       allow read, update, delete: if isOwner(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
@@ -79,8 +72,8 @@ service cloud.firestore {
         );
 
       allow delete: if
-        (resource.data.ownerIds != null && resource.data.ownerIds.hasAny([request.auth.uid])) ||
-        (resource.data.ownerIds == null && request.auth.uid == resource.data.userId);
+        isOwner(resource.data.userId) ||
+        (resource.data.ownerIds != null && resource.data.ownerIds.hasAny([request.auth.uid]));
     }
 
     // Pointer doc, one per user, mapping to their current family (if any).

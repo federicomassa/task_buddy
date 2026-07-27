@@ -55,6 +55,27 @@ List<Task> filterTasks(
   return result;
 }
 
+Future<bool> _confirmDeleteTask(BuildContext context, String title) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete task?'),
+      content: Text('This will permanently delete "$title".'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
 class TasksScreen extends StatelessWidget {
   const TasksScreen({super.key});
 
@@ -148,7 +169,11 @@ class _TasksTabState extends ConsumerState<_TasksTab> {
                       categories: categories,
                       onToggle: (_) => taskRepo.toggleComplete(task),
                       onTap: () => showTaskFormDialog(context, task: task),
-                      onDelete: () => taskRepo.deleteTask(task.id),
+                      onDelete: () async {
+                        if (await _confirmDeleteTask(context, task.title)) {
+                          taskRepo.deleteTask(task.id);
+                        }
+                      },
                     );
                   },
                 );
@@ -177,6 +202,8 @@ class _FamilyTab extends ConsumerWidget {
     final userId = ref.watch(currentUserIdProvider);
     final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
     final taskRepo = ref.read(taskRepositoryProvider);
+    final filterState = ref.watch(familyTaskFilterProvider);
+    final today = ref.watch(todayProvider);
 
     if (familyId == null) {
       return Scaffold(
@@ -201,55 +228,83 @@ class _FamilyTab extends ConsumerWidget {
     final tasksAsync = ref.watch(familyTasksStreamProvider);
 
     return Scaffold(
-      body: tasksAsync.when(
-        data: (tasks) {
-          if (tasks.isEmpty) {
-            return const Center(child: Text('No family tasks yet.'));
-          }
-          final unclaimed = tasks.where((t) => t.ownerIds.isEmpty).toList();
-          final claimed = tasks.where((t) => t.ownerIds.isNotEmpty).toList();
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                icon: Badge(
+                  isLabelVisible: !filterState.isDefault,
+                  child: const Icon(Icons.filter_list),
+                ),
+                onPressed: () => showFamilyTaskFilterSheet(context, ref),
+              ),
+            ),
+          ),
+          Expanded(
+            child: tasksAsync.when(
+              data: (tasks) {
+                final filtered = filterTasks(
+                  tasks,
+                  filterState.status,
+                  filterState.categoryId,
+                  filterState.dateFilter,
+                  today: today,
+                );
+                if (filtered.isEmpty) {
+                  return const Center(child: Text('No family tasks match your filters.'));
+                }
+                final unclaimed = filtered.where((t) => t.ownerIds.isEmpty).toList();
+                final claimed = filtered.where((t) => t.ownerIds.isNotEmpty).toList();
 
-          return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [
-              if (unclaimed.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Text(
-                    'Unclaimed — someone should take these!',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                for (final task in unclaimed)
-                  _FamilyTaskRow(
-                    task: task,
-                    categories: categories,
-                    isOwner: false,
-                    onClaim: () => taskRepo.claimOwnership(task, userId),
-                    onRelease: null,
-                    onTap: null,
-                  ),
-              ],
-              if (claimed.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text('Claimed', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-                for (final task in claimed)
-                  _FamilyTaskRow(
-                    task: task,
-                    categories: categories,
-                    isOwner: task.ownerIds.contains(userId),
-                    onClaim: task.ownerIds.contains(userId) ? null : () => taskRepo.claimOwnership(task, userId),
-                    onRelease: task.ownerIds.contains(userId) ? () => taskRepo.releaseOwnership(task, userId) : null,
-                    onTap: task.ownerIds.contains(userId) ? () => showTaskFormDialog(context, task: task) : null,
-                  ),
-              ],
-            ],
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, st) => Center(child: Text('Error: $err')),
+                return ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: [
+                    if (unclaimed.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Text(
+                          'Unclaimed — someone should take these!',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      for (final task in unclaimed)
+                        _FamilyTaskRow(
+                          task: task,
+                          categories: categories,
+                          isOwner: false,
+                          canDelete: task.userId == userId,
+                          onClaim: () => taskRepo.claimOwnership(task, userId),
+                          onRelease: null,
+                          onTap: null,
+                        ),
+                    ],
+                    if (claimed.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Text('Claimed', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      for (final task in claimed)
+                        _FamilyTaskRow(
+                          task: task,
+                          categories: categories,
+                          isOwner: task.ownerIds.contains(userId),
+                          canDelete: task.userId == userId || task.ownerIds.contains(userId),
+                          onClaim: task.ownerIds.contains(userId) ? null : () => taskRepo.claimOwnership(task, userId),
+                          onRelease: task.ownerIds.contains(userId) ? () => taskRepo.releaseOwnership(task, userId) : null,
+                          onTap: task.ownerIds.contains(userId) ? () => showTaskFormDialog(context, task: task) : null,
+                        ),
+                    ],
+                  ],
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, st) => Center(child: Text('Error: $err')),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -259,6 +314,7 @@ class _FamilyTaskRow extends ConsumerWidget {
   final Task task;
   final List<Category> categories;
   final bool isOwner;
+  final bool canDelete;
   final VoidCallback? onClaim;
   final VoidCallback? onRelease;
   final VoidCallback? onTap;
@@ -267,6 +323,7 @@ class _FamilyTaskRow extends ConsumerWidget {
     required this.task,
     required this.categories,
     required this.isOwner,
+    required this.canDelete,
     required this.onClaim,
     required this.onRelease,
     required this.onTap,
@@ -284,6 +341,13 @@ class _FamilyTaskRow extends ConsumerWidget {
           categories: categories,
           onToggle: isOwner ? (_) => taskRepo.toggleComplete(task) : (_) {},
           onTap: onTap,
+          onDelete: canDelete
+              ? () async {
+                  if (await _confirmDeleteTask(context, task.title)) {
+                    await taskRepo.deleteTask(task.id);
+                  }
+                }
+              : null,
         ),
         if (onClaim != null || onRelease != null)
           Padding(

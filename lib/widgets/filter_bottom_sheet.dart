@@ -15,6 +15,14 @@ Future<void> showTaskFilterSheet(BuildContext context, WidgetRef ref) {
   );
 }
 
+Future<void> showFamilyTaskFilterSheet(BuildContext context, WidgetRef ref) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => const _FamilyTaskFilterSheetContent(),
+  );
+}
+
 Future<void> showGoalFilterSheet(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet(
     context: context,
@@ -38,6 +46,30 @@ class _TaskFilterSheetContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(taskFilterProvider);
     final notifier = ref.read(taskFilterProvider.notifier);
+    final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
+
+    return _FilterSheetBody<TaskFilter>(
+      statusValues: TaskFilter.values,
+      selectedStatus: state.status,
+      statusLabel: (f) => f.label,
+      categories: categories,
+      selectedCategoryId: state.categoryId,
+      dateFilter: state.dateFilter,
+      onStatusChanged: (f) => notifier.update((s) => s.copyWith(status: f)),
+      onCategoryChanged: (id) => notifier.update((s) => s.copyWith(categoryId: id)),
+      onDateFilterChanged: (d) => notifier.update((s) => s.copyWith(dateFilter: d)),
+      onReset: () => notifier.update((_) => TaskFilterState.defaults()),
+    );
+  }
+}
+
+class _FamilyTaskFilterSheetContent extends ConsumerWidget {
+  const _FamilyTaskFilterSheetContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(familyTaskFilterProvider);
+    final notifier = ref.read(familyTaskFilterProvider.notifier);
     final categories = ref.watch(categoriesStreamProvider).value ?? const <Category>[];
 
     return _FilterSheetBody<TaskFilter>(

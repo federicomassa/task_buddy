@@ -252,6 +252,21 @@ final taskFilterProvider = NotifierProvider<TaskFilterNotifier, TaskFilterState>
   TaskFilterNotifier.new,
 );
 
+/// Filter selections for the Family tab. Kept separate from
+/// [taskFilterProvider] since Tasks and Family are independent screens with
+/// their own filter state. See [TaskFilterNotifier].
+class FamilyTaskFilterNotifier extends Notifier<TaskFilterState> {
+  @override
+  TaskFilterState build() => TaskFilterState.defaults();
+
+  void update(TaskFilterState Function(TaskFilterState) fn) => state = fn(state);
+}
+
+final familyTaskFilterProvider =
+    NotifierProvider<FamilyTaskFilterNotifier, TaskFilterState>(
+  FamilyTaskFilterNotifier.new,
+);
+
 /// Filter selections for the Goals tab. See [TaskFilterNotifier].
 class GoalFilterNotifier extends Notifier<GoalFilterState> {
   @override

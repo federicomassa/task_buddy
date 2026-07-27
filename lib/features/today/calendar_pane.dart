@@ -431,6 +431,7 @@ class _DayCalendarViewState extends ConsumerState<DayCalendarView> {
                     _HourGrid(),
                     _OffHoursShading(activeHours: activeHours),
                     ..._buildBlocks(context, renderSegments, constraints.maxWidth),
+                    const _NowLine(),
                     if (previewMinutes != null)
                       _DropPreview(
                         minutes: previewMinutes,
@@ -490,6 +491,42 @@ class _HourGrid extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+/// A thin horizontal line marking the current time (now) on the calendar.
+class _NowLine extends ConsumerWidget {
+  const _NowLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(clockProvider).now();
+    final nowMinutes = now.hour * 60 + now.minute;
+    final top = nowMinutes / 60 * pxPerHour;
+
+    // Only show the line if the current time is within the visible day (0-24h)
+    if (nowMinutes < 0 || nowMinutes >= 24 * 60) {
+      return const SizedBox.shrink();
+    }
+
+    // Bright green — stands out against both light/dark themes and task colors.
+    const color = Color(0xFF00E676);
+
+    // Extend from the task panel left edge (_leftGutter) plus ~30% of the
+    // hour gutter width into the hour labels, so it "infringes a little bit".
+    const double leftInset = _leftGutter - (_leftGutter * 0.3);
+
+    return Positioned(
+      top: top,
+      left: leftInset,
+      right: _rightMargin,
+      child: IgnorePointer(
+        child: Container(
+          height: 2,
+          color: color,
+        ),
+      ),
     );
   }
 }

@@ -2,8 +2,13 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Allowlist check - returns true if user's UID exists in /allowlist/{uid}
+    function isAuthorized() {
+      return exists(/databases/$(database)/documents/allowlist/$(request.auth.uid));
+    }
+
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && isAuthorized();
     }
 
     function isOwner(userId) {
@@ -133,6 +138,12 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/userFamily/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/userFamily/$(request.auth.uid)).data.familyId == familyId
         );
+    }
+
+    // Allowlist collection - only readable by authorized users, write via Admin SDK only
+    match /allowlist/{uid} {
+      allow read: if isAuthorized();
+      allow write: if false;
     }
   }
 }
